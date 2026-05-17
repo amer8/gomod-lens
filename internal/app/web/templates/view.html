@@ -1,0 +1,226 @@
+{{define "index"}}<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="user-scalable=no, width=device-width, initial-scale=1, maximum-scale=1">
+    <title>go.mod Lens</title>
+    <meta name="description" content="Visualization of Go module dependencies inspired by npm.anvaka.com">
+    <link rel="stylesheet" href="/assets/main.css">
+    {{.ImportMapScript}}
+  </head>
+  <body>
+    <div id="app" class="full">
+      <div id="graph-canvas" class="graph-empty"></div>
+      <div id="left-panel" class="left-panel left-panel-empty">
+        <div id="navbar-component" class="navbar-component navbar-component-empty">
+          <form
+            id="search-form"
+            class="search"
+            role="search"
+            hx-get="/graph"
+            hx-target="#graph-result"
+            hx-swap="outerHTML"
+            hx-trigger="gomod-lens:manual"
+          >
+            <div class="control-stack">
+              <div class="input-group">
+                <input
+                  id="module-target"
+                  name="target"
+                  autofocus
+                  type="text"
+                  class="form-control"
+                  placeholder="Search modules or paste a path.."
+                  spellcheck="false"
+                  autocomplete="off"
+                >
+                <span class="input-group-btn">
+                  <button id="analyze-button" class="btn" type="submit">Analyze</button>
+                </span>
+              </div>
+            </div>
+          </form>
+          <div id="graph-progress" class="graph-progress compact" hidden>
+            <h4>Resolving graph <span id="loading-progress">0</span>%..</h4>
+          </div>
+          <div id="graph-errors" class="graph-errors compact" hidden>
+            <h4>Graph build failed</h4>
+            <div id="error-message" class="error-message"></div>
+          </div>
+        </div>
+        {{template "panelAttribution" .}}
+        <div id="graph-result" data-state="empty"></div>
+      </div>
+      {{template "githubLink" .}}
+    </div>
+    <script src="{{.HtmxURL}}"></script>
+    <script type="module" src="/assets/app.js"></script>
+  </body>
+</html>{{end}}
+
+{{define "graphFragment"}}<div id="graph-result" data-state="loaded" data-target="{{.Graph.Meta.Target}}">
+  {{.GraphPayloadScript}}
+  {{template "sidebarPanel" .}}
+</div>{{end}}
+
+{{define "graphErrorFragment"}}<div id="graph-result" data-state="error" data-error="{{.Message}}"></div>{{end}}
+
+{{define "panelAttribution"}}<div class="panel-intro">
+  <div class="attribution-row panel-attribution">
+    <a
+      class="attribution-mascot-link"
+      href="https://github.com/amer8/gomod-lens"
+      target="_blank"
+      rel="noreferrer"
+      aria-label="Open gomod-lens repository on GitHub"
+      title="Open repository on GitHub"
+    >
+      <img
+        class="attribution-mascot"
+        src="/assets/gopher-63.svg"
+        width="72"
+        height="72"
+        alt="go.mod Lens gopher mascot"
+        loading="lazy"
+        decoding="async"
+      >
+    </a>
+    <p class="data-attribution">
+      Module metadata from
+      <a href="https://proxy.golang.org/" target="_blank" rel="noreferrer">Go module mirror</a>;
+      <a href="https://securityscorecards.dev/" target="_blank" rel="noreferrer">OpenSSF Scorecard</a>
+      scores and project metadata from
+      <a href="https://deps.dev/" target="_blank" rel="noreferrer">deps.dev</a>;
+      suggestions from
+      <a href="https://docs.github.com/en/rest/search/search" target="_blank" rel="noreferrer">GitHub Search</a>.
+    </p>
+  </div>
+</div>{{end}}
+
+{{define "sidebarPanel"}}<div class="infoBox">
+  <a href="#" class="hide-info-box">show graph</a>
+  <div class="packageInfo">
+    {{if .LensPanels}}
+      <div class="all-licenses lens-section">
+        <div class="lens-heading-row">
+          <h4>Lenses</h4>
+          <div class="lens-switcher" aria-label="Analysis lenses">
+            {{range .LensPanels}}{{template "lensCircle" .}}{{end}}
+            <a
+              class="lens-circle lens-circle-add"
+              href="https://github.com/amer8/gomod-lens/blob/main/CONTRIBUTING.md#adding-lenses"
+              target="_blank"
+              rel="noreferrer"
+              aria-label="Learn how to add a lens"
+              title="Add a lens"
+            ></a>
+          </div>
+        </div>
+        {{range .LensPanels}}{{template "lensPanel" .}}{{end}}
+      </div>
+    {{end}}
+    <div class="all-licenses">
+      <h4>Relation groups</h4>
+      <div class="license-container">
+        {{range .RelationGroups}}{{template "highlightRow" .}}{{end}}
+      </div>
+    </div>
+    <div class="all-licenses">
+      <h4>Module origins</h4>
+      <div class="license-container">
+        {{range .OriginGroups}}{{template "highlightRow" .}}{{end}}
+      </div>
+    </div>
+    <div class="all-licenses">
+      <h4>Dependency hubs</h4>
+      <div class="license-container">
+        {{range .NameEntries}}{{template "nameRow" .}}{{end}}
+      </div>
+    </div>
+  </div>
+</div>{{end}}
+
+{{define "highlightRow"}}<a
+  class="license-row"
+  href="{{.Href}}"
+  data-highlight-ids="{{.IDsJSON}}"
+  data-highlight-color="{{.Color}}"
+  data-highlight-nodes-only="{{.NodesOnlyString}}"
+>
+  <span>{{.Name}}</span>
+  <span class="last">{{.Count}}</span>
+</a>{{end}}
+
+{{define "lensCircle"}}<button
+  type="button"
+  class="lens-circle lens-circle-{{.ID}}{{if .Active}} lens-circle-active{{end}}"
+  data-lens-panel-target="{{.ID}}"
+  title="{{.Name}}"
+  aria-label="{{.Name}}"
+  {{if .Active}}aria-current="true"{{end}}
+></button>{{end}}
+
+{{define "lensPanel"}}<div class="lens-panel" data-lens-panel="{{.ID}}"{{if not .Active}} hidden{{end}}>
+  <div class="lens-panel-heading">
+    <span>{{.Name}}</span>
+    <span class="last">{{.Count}}</span>
+  </div>
+  <div class="license-container">
+    {{range .Groups}}{{template "scoreRow" .}}{{end}}
+  </div>
+</div>{{end}}
+
+{{define "scoreRow"}}<a
+  class="license-row score-row"
+  href="{{.Href}}"
+  data-highlight-ids="{{.IDsJSON}}"
+  data-highlight-color="{{.Color}}"
+  data-highlight-nodes-only="{{.NodesOnlyString}}"
+>
+  <span>
+    <i class="score-swatch" style="{{backgroundColor .Color}}"></i>
+    {{.Name}}
+  </span>
+  <span class="last">{{.Count}}</span>
+</a>{{end}}
+
+{{define "nameRow"}}{{if eq .Count 1}}
+  <a
+    class="license-row"
+    href="{{.Href}}"
+    title="{{.Title}}"
+    data-module-target="{{.Target}}"
+  >
+    <span class="truncate">{{.Name}}</span>
+    <span class="last module-dependency-count">{{.DependencyCount}}</span>
+  </a>
+{{else}}
+  <a
+    class="license-row"
+    href="{{.Href}}"
+    title="{{.Title}}"
+    data-highlight-ids="{{.IDsJSON}}"
+    data-highlight-color="{{.Color}}"
+    data-highlight-nodes-only="{{.NodesOnlyString}}"
+  >
+    <span class="truncate">{{.Name}}</span>
+    <span class="last module-dependency-count">{{.DependencyCount}}</span>
+  </a>
+{{end}}{{end}}
+
+{{define "githubLink"}}<a
+  class="github-link"
+  href="https://github.com/amer8/gomod-lens"
+  target="_blank"
+  rel="noreferrer"
+  aria-label="Contribute to gomod-lens on GitHub"
+  title="Contribute on GitHub"
+>
+  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    <path
+      fill="currentColor"
+      d="M12 2C6.48 2 2 6.58 2 12.26c0 4.54 2.87 8.39 6.84 9.75.5.09.68-.22.68-.49 0-.24-.01-.89-.01-1.75-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.08 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.31.1-2.72 0 0 .84-.28 2.75 1.05A9.36 9.36 0 0 1 12 6.97c.85 0 1.71.12 2.51.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.64 1.03 2.76 0 3.95-2.34 4.82-4.57 5.07.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.8 0 .27.18.59.69.49A10.06 10.06 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"
+    ></path>
+  </svg>
+  <span class="github-link-label">Contribute</span>
+</a>{{end}}

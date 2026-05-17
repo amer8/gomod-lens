@@ -1,0 +1,51 @@
+name: Bug report
+description: Report something that is broken or surprising.
+title: "Bug: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the module target, command, or browser action that triggers the issue.
+      placeholder: |
+        1. Run `go run .`
+        2. Open `http://localhost:8080/#target=golang.org%2Fx%2Ftools%40latest`
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Share the details that could affect reproduction.
+      value: |
+        - OS:
+        - Go version:
+        - Browser:
+        - Module target:
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Paste relevant server output, browser console errors, or screenshots.
+      render: text
+    validations:
+      required: false

@@ -1,0 +1,1 @@
+var r=function r(t,e){var o;t||(t={});if(e)for(o in e)if(e.hasOwnProperty(o)){var a=t.hasOwnProperty(o),f=typeof e[o];!a||typeof t[o]!==f?t[o]=e[o]:"object"===f&&(t[o]=r(t[o],e[o]))}return t};export{r as default};

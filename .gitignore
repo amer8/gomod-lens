@@ -1,0 +1,5 @@
+.*/
+!.github/
+dist/assets/gomod-lens.wasm
+dist/assets/wasm_exec.js
+dist/assets/vendor/
