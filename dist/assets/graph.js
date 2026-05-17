@@ -13,6 +13,7 @@ let layout = null
 let graph = null
 let graphData = null
 let selectedNodeId = ''
+let activeLensID = 'openssf'
 let highlightRequest = null
 let onNodeSelected = null
 let bfsDistances = new Map()
@@ -30,6 +31,13 @@ const openSSFWeakScoreColor = '#f08a4b'
 const openSSFPoorScoreColor = '#dc5f65'
 const openSSFUnavailableColor = '#8b95a7'
 const openSSFErrorColor = '#e5a15a'
+const releaseFreshnessCurrentColor = '#6ed0b3'
+const releaseFreshnessPatchColor = '#f2c14e'
+const releaseFreshnessMinorColor = '#f08a4b'
+const releaseFreshnessMajorColor = '#dc5f65'
+const releaseFreshnessPreviewColor = '#b985ff'
+const releaseFreshnessUnknownColor = '#8b95a7'
+const releaseFreshnessErrorColor = '#e5a15a'
 const baseLayoutEnergyThreshold = 0.003
 const maxLayoutRunMs = 12000
 
@@ -38,7 +46,8 @@ export function renderGraph(container, payload, options = {}) {
 
   disposeGraph()
   graphData = payload
-  selectedNodeId = payload.rootId || ''
+  selectedNodeId = ''
+  activeLensID = 'openssf'
   highlightRequest = null
   onNodeSelected = options.onNodeSelected || null
   hasInitialFit = false
@@ -233,6 +242,19 @@ export function selectNode(nodeId) {
   applySelectionHighlight()
 }
 
+export function setGraphLens(lensID) {
+  activeLensID = lensID || 'openssf'
+  nodeCol?.invalidateContent?.()
+  const positions = layout?.getPositions?.()
+  if (positions && nodeCol && edgeCol) {
+    nodeCol.syncPositions(positions)
+    edgeCol.syncPositions(positions)
+  }
+  if (scene) {
+    scene.requestRender()
+  }
+}
+
 export function applyHighlightRequest(request) {
   const ids = request?.ids || []
   if (ids.length === 1) {
@@ -399,6 +421,13 @@ function layoutNodeSize(nodeId) {
 
 function nodeFill(data, ctx) {
   const node = graph?.getNode(data.nodeId)?.data
+  return lensNodeFill(node, ctx)
+}
+
+function lensNodeFill(node, ctx = null) {
+  if (activeLensID === 'release-freshness') {
+    return releaseFreshnessNodeFill(node, ctx)
+  }
   return openSSFNodeFill(node, ctx)
 }
 
@@ -406,7 +435,7 @@ function openSSFNodeFill(node, ctx = null) {
   if (ctx?.dimmed) return '#50586a'
 
   if (!node) return openSSFNoScorecardColor
-  const scoreInfo = node.openssf
+  const scoreInfo = openSSFLensResult(node)
   if (!scoreInfo) return openSSFUnavailableColor
   if (scoreInfo.status === 'error') return openSSFErrorColor
   if (scoreInfo.status === 'no_scorecard') return openSSFNoScorecardColor
@@ -419,10 +448,39 @@ function openSSFNodeFill(node, ctx = null) {
   return openSSFPoorScoreColor
 }
 
+function openSSFLensResult(node) {
+  return node?.lenses?.openssf || node?.openssf
+}
+
+function releaseFreshnessNodeFill(node, ctx = null) {
+  if (ctx?.dimmed) return '#50586a'
+
+  const info = node?.lenses?.['release-freshness']
+  if (!info) return releaseFreshnessUnknownColor
+
+  switch (info.status) {
+    case 'current':
+      return releaseFreshnessCurrentColor
+    case 'patch_behind':
+      return releaseFreshnessPatchColor
+    case 'minor_behind':
+      return releaseFreshnessMinorColor
+    case 'major_behind':
+      return releaseFreshnessMajorColor
+    case 'prerelease':
+    case 'pseudo_version':
+      return releaseFreshnessPreviewColor
+    case 'error':
+      return releaseFreshnessErrorColor
+    default:
+      return releaseFreshnessUnknownColor
+  }
+}
+
 function edgeColor(data) {
   const targetNode = graph?.getNode(data.toId)?.data
   if (!targetNode) return '#4f5768'
-  return openSSFNodeFill(targetNode)
+  return lensNodeFill(targetNode)
 }
 
 function nodeOpacity(_data, ctx) {

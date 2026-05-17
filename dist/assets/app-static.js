@@ -3,6 +3,7 @@ import {
   clearGraph,
   renderGraph,
   selectNode,
+  setGraphLens,
 } from './graph.js'
 import {
   resolveGraph,
@@ -94,6 +95,13 @@ document.addEventListener('click', (event) => {
       color: highlightLink.dataset.highlightColor || '',
       nodesOnly: highlightLink.dataset.highlightNodesOnly === 'true',
     })
+    return
+  }
+
+  const lensButton = event.target.closest('[data-lens-panel-target]')
+  if (lensButton) {
+    event.preventDefault()
+    activateLensPanel(lensButton.dataset.lensPanelTarget || '')
     return
   }
 
@@ -197,8 +205,8 @@ async function loadGraph(target) {
       onProgress: ({ value }) => setLoadingProgress(value),
     })
 
-    if (!hasCompleteOpenSSFData(payload)) {
-      throw new Error('OpenSSF data was not included in the graph response')
+    if (!hasCompleteBuiltInLensData(payload)) {
+      throw new Error('Built-in lens data was not included in the graph response')
     }
 
     syncResolvedTarget(payload?.meta?.target || target)
@@ -209,6 +217,7 @@ async function loadGraph(target) {
         selectNode(node?.id || '')
       },
     })
+    setGraphLens(activeLensID())
     setLoading(false)
     setError('')
     setGraphLoaded(true)
@@ -234,18 +243,17 @@ function renderSidebar(payload) {
   const infoBox = el('div', { className: 'infoBox' })
   const packageInfo = el('div', { className: 'packageInfo' })
 
+  if (viewModel.lensPanels?.length) {
+    packageInfo.append(lensSection(viewModel.lensPanels))
+  }
+
   packageInfo.append(
     groupSection('Relation groups', viewModel.relationGroups || [], highlightRow),
   )
 
-  const scores = viewModel.openSSFGroups || []
-  if (scores.length) {
-    packageInfo.append(scoreSection(scores))
-  }
-
   packageInfo.append(
     groupSection('Module origins', viewModel.originGroups || [], highlightRow),
-    groupSection('Modules', viewModel.nameEntries || [], nameRow),
+    groupSection('Dependency hubs', viewModel.nameEntries || [], nameRow),
   )
 
   infoBox.append(
@@ -256,25 +264,69 @@ function renderSidebar(payload) {
   return result
 }
 
+function lensSection(panels) {
+  const section = el('div', { className: 'all-licenses lens-section' })
+  const headingRow = el('div', { className: 'lens-heading-row' })
+  const switcher = el('div', { className: 'lens-switcher', 'aria-label': 'Analysis lenses' })
+  panels.forEach((panel) => {
+    switcher.append(lensCircle(panel))
+  })
+  switcher.append(el('a', {
+    className: 'lens-circle lens-circle-add',
+    href: 'https://github.com/amer8/gomod-lens/blob/main/CONTRIBUTING.md#adding-lenses',
+    target: '_blank',
+    rel: 'noreferrer',
+    'aria-label': 'Learn how to add a lens',
+    title: 'Add a lens',
+  }))
+  headingRow.append(el('h4', {}, 'Lenses'), switcher)
+  section.append(headingRow)
+  panels.forEach((panel) => {
+    section.append(lensPanel(panel))
+  })
+  return section
+}
+
+function lensCircle(panel) {
+  const attrs = {
+    type: 'button',
+    className: `lens-circle lens-circle-${panel.id}${panel.active ? ' lens-circle-active' : ''}`,
+    dataset: { lensPanelTarget: panel.id },
+    title: panel.name,
+    'aria-label': panel.name,
+  }
+  if (panel.active) {
+    attrs['aria-current'] = 'true'
+  }
+  return el('button', attrs)
+}
+
+function lensPanel(panel) {
+  const section = el('div', {
+    className: 'lens-panel',
+    dataset: { lensPanel: panel.id },
+    hidden: !panel.active,
+  })
+  section.append(
+    el('div', { className: 'lens-panel-heading' },
+      el('span', {}, panel.name),
+      el('span', { className: 'last' }, String(panel.count))),
+  )
+  const container = el('div', { className: 'license-container' })
+  const groups = panel.groups || []
+  groups.forEach((entry) => {
+    container.append(scoreRow(entry))
+  })
+  section.append(container)
+  return section
+}
+
 function groupSection(title, entries, rowRenderer) {
   const section = el('div', { className: 'all-licenses' })
   section.append(el('h4', {}, title))
   const container = el('div', { className: 'license-container' })
   entries.forEach((entry) => {
     container.append(rowRenderer(entry))
-  })
-  section.append(container)
-  return section
-}
-
-function scoreSection(entries) {
-  const section = el('div', { className: 'all-licenses' })
-  section.append(
-    el('h4', {}, 'OpenSSF scores'),
-  )
-  const container = el('div', { className: 'license-container' })
-  entries.forEach((entry) => {
-    container.append(scoreRow(entry))
   })
   section.append(container)
   return section
@@ -347,8 +399,50 @@ function errorGraphResult(message) {
   })
 }
 
-function hasCompleteOpenSSFData(payload) {
-  return Array.isArray(payload?.nodes) && payload.nodes.every((node) => node.openssf?.status)
+function hasCompleteBuiltInLensData(payload) {
+  if (!Array.isArray(payload?.nodes)) return false
+
+  const lensIDs = new Set((payload?.meta?.lenses || []).map((lens) => lens?.id).filter(Boolean))
+  for (const lensID of ['openssf', 'release-freshness']) {
+    if (!lensIDs.has(lensID)) continue
+    if (!payload.nodes.every((node) => lensResult(node, lensID)?.status)) return false
+  }
+  return true
+}
+
+function lensResult(node, lensID) {
+  if (lensID === 'openssf') return node?.lenses?.openssf || node?.openssf
+  return node?.lenses?.[lensID]
+}
+
+function activateLensPanel(lensID) {
+  lensID = lensID.trim()
+  if (!lensID) return
+
+  const result = document.getElementById('graph-result')
+  if (!result) return
+
+  const buttons = result.querySelectorAll('[data-lens-panel-target]')
+  const panels = result.querySelectorAll('[data-lens-panel]')
+  buttons.forEach((button) => {
+    const active = button.dataset.lensPanelTarget === lensID
+    button.classList.toggle('lens-circle-active', active)
+    if (active) {
+      button.setAttribute('aria-current', 'true')
+    } else {
+      button.removeAttribute('aria-current')
+    }
+  })
+  panels.forEach((panel) => {
+    panel.hidden = panel.dataset.lensPanel !== lensID
+  })
+  setGraphLens(lensID)
+}
+
+function activeLensID() {
+  const result = document.getElementById('graph-result')
+  const activeButton = result?.querySelector('[data-lens-panel-target].lens-circle-active')
+  return activeButton?.dataset.lensPanelTarget || 'openssf'
 }
 
 function setGraphLoaded(value) {
