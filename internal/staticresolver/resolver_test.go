@@ -2,7 +2,9 @@ package staticresolver
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/amer8/gomod-lens/internal/graph"
@@ -76,6 +78,63 @@ func TestResolveGraphBuildsBrowserGraph(t *testing.T) {
 	}
 	if got, ok := transitive.LensResult(graph.LensReleaseFreshness); !ok || got.Status != graph.ReleaseFreshnessStatusMinorBehind {
 		t.Fatalf("transitive release freshness lens result = %+v, ok = %v", got, ok)
+	}
+}
+
+func TestResolveGraphUsesDeclaredRootModulePath(t *testing.T) {
+	fetcher := fakeFetcher{
+		proxyModuleURL("github.com/tailscale/tailscale") + "/@latest":        `{"Version":"v1.98.2"}`,
+		proxyModuleURL("github.com/tailscale/tailscale") + "/@v/v1.98.2.mod": "module tailscale.com\n\nrequire golang.org/x/sys v0.37.0\n",
+		proxyModuleURL("golang.org/x/sys") + "/@v/v0.37.0.mod":               "module golang.org/x/sys\n",
+	}
+	resolver := New(fetcher)
+
+	result, err := resolver.ResolveGraph(context.Background(), "github.com/tailscale/tailscale", Options{})
+	if err != nil {
+		t.Fatalf("ResolveGraph returned error: %v", err)
+	}
+	if result.RootID != "tailscale.com@v1.98.2" {
+		t.Fatalf("root ID = %q, want declared module path", result.RootID)
+	}
+	if result.Meta.Target != "tailscale.com" {
+		t.Fatalf("target = %q, want declared module path", result.Meta.Target)
+	}
+	if root := nodeByID(result.Nodes, "tailscale.com@v1.98.2"); root == nil || !root.Root {
+		t.Fatalf("declared root node = %#v, want root node", root)
+	}
+	if dep := nodeByID(result.Nodes, "golang.org/x/sys@v0.37.0"); dep == nil || !dep.Direct {
+		t.Fatalf("direct dependency = %#v, want direct node", dep)
+	}
+}
+
+func TestResolveGraphAllowsLargeBrowserGraph(t *testing.T) {
+	const depCount = 760
+
+	var rootMod strings.Builder
+	rootMod.WriteString("module example.com/root\n\ngo 1.26\n\nrequire (\n")
+	fetcher := fakeFetcher{
+		proxyModuleURL("example.com/root") + "/@latest": `{"Version":"v1.0.0"}`,
+	}
+	for i := 0; i < depCount; i++ {
+		path := fmt.Sprintf("example.com/dep%03d", i)
+		rootMod.WriteString("\t")
+		rootMod.WriteString(path)
+		rootMod.WriteString(" v1.0.0\n")
+		fetcher[proxyModuleURL(path)+"/@v/v1.0.0.mod"] = "module " + path + "\n"
+	}
+	rootMod.WriteString(")\n")
+	fetcher[proxyModuleURL("example.com/root")+"/@v/v1.0.0.mod"] = rootMod.String()
+
+	resolver := New(fetcher)
+	result, err := resolver.ResolveGraph(context.Background(), "example.com/root", Options{})
+	if err != nil {
+		t.Fatalf("ResolveGraph returned error: %v", err)
+	}
+	if result.Meta.NodeCount != depCount+1 {
+		t.Fatalf("node count = %d, want %d", result.Meta.NodeCount, depCount+1)
+	}
+	if result.Meta.EdgeCount != depCount {
+		t.Fatalf("edge count = %d, want %d", result.Meta.EdgeCount, depCount)
 	}
 }
 

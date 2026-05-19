@@ -233,6 +233,76 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 	}
 }
 
+func TestAnalyzeModuleRetriesDeclaredModulePath(t *testing.T) {
+	t.Parallel()
+
+	moduleDir := "/modcache/tailscale.com"
+	runner := fakeRunner(func(_ context.Context, workdir string, _ []string, name string, args ...string) ([]byte, error) {
+		switch commandKey(name, args...) {
+		case "go get github.com/tailscale/tailscale@latest":
+			return nil, &CommandError{
+				Command: "go get github.com/tailscale/tailscale@latest",
+				Output: strings.Join([]string{
+					"go: github.com/tailscale/tailscale@v1.98.2: parsing go.mod:",
+					"\tmodule declares its path as: tailscale.com",
+					"\tbut was required as: github.com/tailscale/tailscale",
+				}, "\n"),
+				Err: fmt.Errorf("exit status 1"),
+			}
+		case "go get tailscale.com@latest":
+			goMod, err := os.ReadFile(filepath.Join(workdir, "go.mod"))
+			if err != nil {
+				t.Fatalf("read temp go.mod: %v", err)
+			}
+			if got := string(goMod); got != remoteModuleSeedGoMod {
+				t.Fatalf("temp go.mod = %q", got)
+			}
+			return nil, nil
+		case "go list -m -json all":
+			if workdir == moduleDir {
+				return []byte(strings.Join([]string{
+					fmt.Sprintf(`{"Path":"tailscale.com","Main":true,"Dir":%q}`, moduleDir),
+					`{"Path":"golang.org/x/sys","Version":"v0.37.0","Dir":"/modcache/sys"}`,
+				}, "\n")), nil
+			}
+			return []byte(strings.Join([]string{
+				`{"Path":"gomod-lens/tmp","Main":true}`,
+				fmt.Sprintf(`{"Path":"tailscale.com","Version":"v1.98.2","Dir":%q}`, moduleDir),
+				`{"Path":"golang.org/x/sys","Version":"v0.37.0","Dir":"/modcache/sys"}`,
+			}, "\n")), nil
+		case "go mod graph":
+			if workdir != moduleDir {
+				t.Fatalf("unexpected module graph workdir: %s", workdir)
+			}
+			return []byte("tailscale.com golang.org/x/sys@v0.37.0\n"), nil
+		case "go mod edit -json":
+			if workdir == moduleDir {
+				return []byte(`{"Require":[{"Path":"golang.org/x/sys","Version":"v0.37.0","Indirect":false}]}`), nil
+			}
+			return []byte(`{"Require":[{"Path":"tailscale.com","Version":"v1.98.2","Indirect":false},{"Path":"golang.org/x/sys","Version":"v0.37.0","Indirect":true}]}`), nil
+		default:
+			t.Fatalf("unexpected command: %s", commandKey(name, args...))
+			return nil, nil
+		}
+	})
+
+	analyzer := newTestAnalyzer(runner)
+	graph, err := analyzer.Analyze(context.Background(), Request{Target: "github.com/tailscale/tailscale", Mode: ModeModule})
+	if err != nil {
+		t.Fatalf("Analyze() error = %v", err)
+	}
+
+	if graph.RootID != "tailscale.com@v1.98.2" {
+		t.Fatalf("RootID = %q", graph.RootID)
+	}
+	if graph.Meta.Target != "tailscale.com" {
+		t.Fatalf("target = %q", graph.Meta.Target)
+	}
+	if !indexNodes(graph.Nodes)["tailscale.com@v1.98.2"].Root {
+		t.Fatalf("expected declared module path to become graph root")
+	}
+}
+
 func TestAnalyzeLocalExcludesPseudoGoModules(t *testing.T) {
 	t.Parallel()
 

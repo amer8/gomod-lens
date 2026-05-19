@@ -20,7 +20,7 @@ const (
 	githubSearchURL                 = "https://api.github.com/search/repositories"
 	defaultModuleSearchLimit        = 6
 	githubModuleSearchCandidateSize = 25
-	maxSelectedModules              = 750
+	maxSelectedModules              = 1500
 	moduleLoadConcurrency           = 8
 	scoreLoadConcurrency            = 5
 )
@@ -100,6 +100,15 @@ func (r *Resolver) ResolveGraph(ctx context.Context, target string, options Opti
 	rootMeta, err := r.loadGoMod(ctx, root.Path, root.Version)
 	if err != nil {
 		return nil, err
+	}
+	if declaredPath := declaredRootModulePath(rootMeta.ModulePath, root.Path); declaredPath != root.Path {
+		root = moduleRef{Path: declaredPath, Version: rootVersion, ID: moduleID(declaredPath, rootVersion)}
+		requested = requestedTarget{
+			Target:  moduleID(declaredPath, requested.Version),
+			Path:    declaredPath,
+			Version: requested.Version,
+		}
+		r.cacheGoMod(root.Path, root.Version, rootMeta)
 	}
 	rootReplacements := rootMeta.Replacements
 	rootExclusions := exclusionIndex(rootMeta.Excludes)
@@ -442,6 +451,18 @@ func (r *Resolver) loadGoMod(ctx context.Context, path, version string) (moduleM
 	return meta, nil
 }
 
+func (r *Resolver) cacheGoMod(path, version string, meta moduleMeta) {
+	if path == "" || version == "" {
+		return
+	}
+	meta.RequestedPath = path
+	meta.RequestedVersion = version
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.modFileCache[path+"@"+version] = meta
+}
+
 func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarget string, resolution buildResolution, rootDirectPaths map[string]bool, rootReplacements []replacement, rootExclusions map[string]bool) (*graph.Graph, error) {
 	nodes := make([]graph.Node, 0, len(resolution.selected))
 	edges := make([]graph.Edge, 0)
@@ -727,6 +748,44 @@ func isLikelyLocalTarget(target string) bool {
 
 func isPseudoModulePath(path string) bool {
 	return path == "go" || path == "toolchain"
+}
+
+func declaredRootModulePath(declared, requested string) string {
+	declared = strings.TrimSpace(declared)
+	if !isPlausibleDeclaredModulePath(declared) {
+		return strings.TrimSpace(requested)
+	}
+	return declared
+}
+
+func isPlausibleDeclaredModulePath(path string) bool {
+	if path == "" ||
+		strings.Contains(path, "@") ||
+		strings.Contains(path, "://") ||
+		strings.ContainsAny(path, "?#") ||
+		strings.HasPrefix(path, ".") ||
+		strings.HasPrefix(path, "/") ||
+		isPseudoModulePath(path) {
+		return false
+	}
+
+	for _, r := range path {
+		switch {
+		case r >= 'a' && r <= 'z':
+			continue
+		case r >= 'A' && r <= 'Z':
+			continue
+		case r >= '0' && r <= '9':
+			continue
+		}
+		switch r {
+		case '/', '.', '-', '_', '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func exclusionIndex(exclusions []exclusion) map[string]bool {

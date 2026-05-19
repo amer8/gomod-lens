@@ -88,6 +88,17 @@ func TestGraphEndpointRejectsLocalTargets(t *testing.T) {
 	}
 }
 
+func TestValidateRequestedModuleTargetAllowsHostRootModules(t *testing.T) {
+	t.Parallel()
+
+	if err := validateRequestedModuleTarget("tailscale.com"); err != nil {
+		t.Fatalf("validateRequestedModuleTarget() error = %v", err)
+	}
+	if err := validateResolvedModuleTarget("tailscale.com@v1.98.2"); err != nil {
+		t.Fatalf("validateResolvedModuleTarget() error = %v", err)
+	}
+}
+
 func TestGraphEndpointRateLimitsRequests(t *testing.T) {
 	t.Parallel()
 

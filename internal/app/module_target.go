@@ -57,9 +57,6 @@ func validateResolvedModuleTarget(target string) error {
 	}
 
 	parts := strings.Split(base, "/")
-	if len(parts) < 2 {
-		return fmt.Errorf("target must include a public module host")
-	}
 	if parts[0] == "" || !strings.Contains(parts[0], ".") || strings.EqualFold(parts[0], "localhost") {
 		return fmt.Errorf("target must include a public module host")
 	}

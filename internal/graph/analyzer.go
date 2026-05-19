@@ -200,13 +200,24 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 	}
 
 	env := append([]string(nil), remoteModuleEnv...)
-	requested := target
-	if _, version := splitModuleToken(target); version == "" {
-		requested += "@latest"
-	}
+	resolvedTarget := target
+	requested := goGetRequestTarget(resolvedTarget)
 
 	if _, err := a.runner.Run(ctx, tempDir, env, "go", "get", requested); err != nil {
-		return nil, fmt.Errorf("resolve module %q: %w", target, err)
+		declaredPath := declaredModulePathFromError(err)
+		if declaredPath == "" {
+			return nil, fmt.Errorf("resolve module %q: %w", target, err)
+		}
+
+		_, version := splitModuleToken(target)
+		resolvedTarget = moduleID(declaredPath, version)
+		requested = goGetRequestTarget(resolvedTarget)
+		if err := os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte(remoteModuleSeedGoMod), 0o644); err != nil {
+			return nil, fmt.Errorf("reset temp go.mod: %w", err)
+		}
+		if _, retryErr := a.runner.Run(ctx, tempDir, env, "go", "get", requested); retryErr != nil {
+			return nil, fmt.Errorf("resolve module %q via declared path %q: %w", target, resolvedTarget, retryErr)
+		}
 	}
 
 	modules, _, err := a.readModuleList(ctx, tempDir, env)
@@ -219,7 +230,7 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 		return nil, err
 	}
 
-	rootID, err := pickRootModuleID(target, tempRequires)
+	rootID, err := pickRootModuleID(resolvedTarget, tempRequires)
 	if err != nil {
 		return nil, err
 	}
@@ -252,13 +263,76 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 	return buildGraph(buildInput{
 		rootID:       rootID,
 		mode:         ModeModule,
-		target:       target,
+		target:       resolvedTarget,
 		modules:      rootModules,
 		edges:        rootEdges,
 		direct:       rootDirect,
 		replacements: replacements,
 		filterToRoot: true,
 	})
+}
+
+func goGetRequestTarget(target string) string {
+	requested := target
+	if _, version := splitModuleToken(requested); version == "" {
+		requested += "@latest"
+	}
+	return requested
+}
+
+func declaredModulePathFromError(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	const marker = "module declares its path as:"
+	text := err.Error()
+	index := strings.Index(text, marker)
+	if index < 0 {
+		return ""
+	}
+
+	rest := strings.TrimSpace(text[index+len(marker):])
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return ""
+	}
+
+	path := strings.TrimSpace(fields[0])
+	if !isPlausibleDeclaredModulePath(path) {
+		return ""
+	}
+	return path
+}
+
+func isPlausibleDeclaredModulePath(path string) bool {
+	if path == "" ||
+		strings.Contains(path, "@") ||
+		strings.Contains(path, "://") ||
+		strings.ContainsAny(path, "?#") ||
+		strings.HasPrefix(path, ".") ||
+		strings.HasPrefix(path, "/") ||
+		isPseudoModulePath(path) {
+		return false
+	}
+
+	for _, r := range path {
+		switch {
+		case r >= 'a' && r <= 'z':
+			continue
+		case r >= 'A' && r <= 'Z':
+			continue
+		case r >= '0' && r <= '9':
+			continue
+		}
+		switch r {
+		case '/', '.', '-', '_', '~':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeLocalDir(target string) (string, error) {

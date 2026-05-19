@@ -216,6 +216,9 @@ func (s *Server) loadGraph(ctx context.Context, target string) (*graph.Graph, er
 		return nil, err
 	}
 	s.graphCache.set(key, cloneGraph(result))
+	if resolvedKey := graphCacheKey(result.Meta.Target); resolvedKey != "" && resolvedKey != key {
+		s.graphCache.set(resolvedKey, cloneGraph(result))
+	}
 	return result, nil
 }
 
