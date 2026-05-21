@@ -7,6 +7,8 @@ run as a Go web server or as a static WebAssembly build, and analyzes modules
 through composable lenses. Built-in lenses currently cover OpenSSF Scorecard
 data from deps.dev and release freshness from the Go module mirror.
 
+Deployed to GitHub Pages: https://amer8.github.io/gomod-lens/
+
 ## Lenses
 
 Lenses attach focused analysis results to each module in the graph. OpenSSF
