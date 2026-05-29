@@ -695,16 +695,23 @@ pre {
     }
 
     .left-panel {
-        top: 12px;
-        right: 12px;
-        bottom: 12px;
-        left: 12px;
+        top: auto;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: max(12px, env(safe-area-inset-bottom));
+        left: max(12px, env(safe-area-inset-left));
         width: auto;
-        max-height: calc(100vh - 24px);
+        max-height: min(52vh, 430px);
+        max-height: min(52dvh, 430px);
+        box-shadow: 0 -18px 45px rgba(0, 0, 0, 0.38);
     }
 
     .left-panel-empty {
+        top: max(12px, env(safe-area-inset-top));
+        right: 136px;
         bottom: auto;
+        max-height: calc(100vh - 24px);
+        max-height: calc(100dvh - 24px);
+        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
     }
 
     .navbar-component-empty {
@@ -718,14 +725,15 @@ pre {
 
     .search {
         width: auto;
+        margin: 12px;
     }
 
-    .left-panel-empty {
-        right: 136px;
+    .left-panel:not(.left-panel-empty) .panel-intro {
+        display: none;
     }
 
     .github-link {
-        top: 12px;
-        right: 12px;
+        top: max(12px, env(safe-area-inset-top));
+        right: max(12px, env(safe-area-inset-right));
     }
 }
