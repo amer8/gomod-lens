@@ -1,6 +1,6 @@
 # Privacy and External Services
 
-Last updated: May 17, 2026
+Last updated: October 14, 2026
 
 go.mod Lens is intended for exploring public Go modules. Do not enter private
 module paths, secret repository names, access tokens, or other non-public
@@ -19,7 +19,10 @@ and disables direct VCS fallback. The Go module mirror, and the Go checksum
 database used by the Go toolchain, may receive requested public module paths and
 versions as part of normal module resolution. The Release Freshness lens also
 uses Go module mirror version-list and latest-version endpoints for modules in
-the displayed graph.
+the displayed graph. After a graph loads, the module version selector in both
+the server UI and static UI requests the root module’s version list and latest
+version directly from `proxy.golang.org` in the visitor’s browser. Successful
+version lookups are kept in page memory for up to five minutes.
 
 See the Go modules services privacy policy:
 <https://proxy.golang.org/privacy>

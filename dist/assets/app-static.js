@@ -1,3 +1,4 @@
+import { createModuleVersionPicker } from './module-versions.js'
 import {
   applyHighlightRequest,
   clearGraph,
@@ -33,6 +34,8 @@ let moduleSuggestionTimer = null
 let moduleSuggestionController = null
 let moduleSuggestions = []
 let activeModuleSuggestion = -1
+
+const versionPicker = createModuleVersionPicker(elements.form, elements.input)
 
 setupModuleSuggestions()
 
@@ -136,6 +139,7 @@ function syncFromHash() {
 }
 
 function resetGraph() {
+  versionPicker.clear()
   graphController?.abort()
   graphController = null
   setLoading(false)
@@ -146,7 +150,7 @@ function resetGraph() {
 }
 
 function resolvedModuleTarget() {
-  return normalizeModuleTarget(elements.input.value)
+  return versionPicker.target(normalizeModuleTarget(elements.input.value))
 }
 
 function submitRequest() {
@@ -190,6 +194,7 @@ function syncResolvedTarget(target) {
 }
 
 async function loadGraph(target) {
+  versionPicker.loading()
   graphController?.abort()
   graphController = new AbortController()
 
@@ -221,8 +226,10 @@ async function loadGraph(target) {
     setLoading(false)
     setError('')
     setGraphLoaded(true)
+    void versionPicker.capture(payload)
   } catch (error) {
     if (error?.name === 'AbortError') return
+    versionPicker.clear()
     setLoading(false)
     setError(error?.message || 'Unable to load graph')
     setGraphResult(errorGraphResult(error?.message || 'Unable to load graph'))
