@@ -9,6 +9,13 @@ data from deps.dev and release freshness from the Go module mirror.
 
 Deployed to GitHub Pages: https://amer8.github.io/gomod-lens/
 
+After a public module loads, the version selector shows the loaded version,
+marks the latest version reported by the Go module proxy, and lets you switch
+to older published versions. The search field keeps the module path; Analyze
+preserves the selected version for that module. Explicit `module@version`
+input and shared URLs still work. This is available in both the Go web UI
+and the static WebAssembly build.
+
 ## Lenses
 
 Lenses attach focused analysis results to each module in the graph. OpenSSF

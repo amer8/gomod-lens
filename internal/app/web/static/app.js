@@ -1,3 +1,4 @@
+import { createModuleVersionPicker } from './module-versions.js'
 import {
   applyHighlightRequest,
   clearGraph,
@@ -29,6 +30,8 @@ let moduleSuggestionTimer = null
 let moduleSuggestionController = null
 let moduleSuggestions = []
 let activeModuleSuggestion = -1
+
+const versionPicker = createModuleVersionPicker(elements.form, elements.input)
 
 setupModuleSuggestions()
 
@@ -118,6 +121,7 @@ document.body.addEventListener('htmx:afterSettle', () => {
 document.body.addEventListener('htmx:responseError', (event) => {
   const detail = event.detail || {}
   setLoading(false)
+  versionPicker.clear()
   setError(detail.xhr?.responseText || 'Unable to load graph')
   clearGraph(elements.graphCanvas)
   setGraphLoaded(false)
@@ -125,6 +129,7 @@ document.body.addEventListener('htmx:responseError', (event) => {
 
 document.body.addEventListener('htmx:sendError', () => {
   setLoading(false)
+  versionPicker.clear()
   setError('Unable to send graph request')
 })
 
@@ -180,6 +185,7 @@ function syncFromHash() {
 }
 
 function resetGraph() {
+  versionPicker.clear()
   setLoading(false)
   setError('')
   const result = document.getElementById('graph-result')
@@ -191,7 +197,7 @@ function resetGraph() {
 }
 
 function resolvedModuleTarget() {
-  return normalizeModuleTarget(elements.input.value)
+  return versionPicker.target(normalizeModuleTarget(elements.input.value))
 }
 
 function submitRequest() {
@@ -235,7 +241,9 @@ function syncResolvedTarget(target) {
 }
 
 function loadGraph(target) {
+  versionPicker.loading()
   if (!window.htmx?.ajax) {
+    versionPicker.clear()
     setError('htmx did not load')
     return
   }
@@ -259,6 +267,7 @@ function handleGraphResult() {
     const payload = readJSONScript('graph-payload')
     if (!payload) {
       setLoading(false)
+      versionPicker.clear()
       setError('Graph response did not include data')
       clearGraph(elements.graphCanvas)
       setGraphLoaded(false)
@@ -266,6 +275,7 @@ function handleGraphResult() {
     }
     if (!hasCompleteBuiltInLensData(payload)) {
       setLoading(false)
+      versionPicker.clear()
       setError('Built-in lens data was not included in the graph response')
       clearGraph(elements.graphCanvas)
       setGraphLoaded(false)
@@ -284,11 +294,13 @@ function handleGraphResult() {
       setLoading(false)
       setError('')
       setGraphLoaded(true)
+      void versionPicker.capture(payload)
     }, 120)
     return
   }
 
   if (state === 'error') {
+    versionPicker.clear()
     setLoading(false)
     setError(result.dataset.error || 'Unable to load graph')
     clearGraph(elements.graphCanvas)
@@ -297,6 +309,7 @@ function handleGraphResult() {
   }
 
   if (state === 'empty') {
+    versionPicker.clear()
     setLoading(false)
     clearGraph(elements.graphCanvas)
     setGraphLoaded(false)
