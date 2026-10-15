@@ -6,11 +6,16 @@
     <title>go.mod Lens</title>
     <meta name="description" content="Visualization of Go module dependencies inspired by npm.anvaka.com">
     <link rel="stylesheet" href="/assets/main.css">
+    <link rel="stylesheet" href="/assets/analysis/analysis.css">
     {{.ImportMapScript}}
   </head>
   <body>
     <div id="app" class="full">
       <div id="graph-canvas" class="graph-empty"></div>
+      <nav id="lens-toolbar" aria-label="Lens selection" hidden></nav>
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="left-panel" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </button>
       <div id="left-panel" class="left-panel left-panel-empty">
         <div id="navbar-component" class="navbar-component navbar-component-empty">
           <form
@@ -49,10 +54,9 @@
             <div id="error-message" class="error-message"></div>
           </div>
         </div>
-        {{template "panelAttribution" .}}
         <div id="graph-result" data-state="empty"></div>
       </div>
-      {{template "githubLink" .}}
+      {{template "panelAttribution" .}}
     </div>
     <script src="{{.HtmxURL}}"></script>
     <script type="module" src="/assets/app.js"></script>
@@ -66,26 +70,19 @@
 
 {{define "graphErrorFragment"}}<div id="graph-result" data-state="error" data-error="{{.Message}}"></div>{{end}}
 
-{{define "panelAttribution"}}<div class="panel-intro">
-  <div class="attribution-row panel-attribution">
-    <a
-      class="attribution-mascot-link"
-      href="https://github.com/amer8/gomod-lens"
-      target="_blank"
-      rel="noreferrer"
-      aria-label="Open gomod-lens repository on GitHub"
-      title="Open repository on GitHub"
+{{define "panelAttribution"}}<details class="panel-intro">
+  <summary class="attribution-toggle" aria-label="Project information" title="Show or hide project information">
+    <img
+      class="attribution-mascot"
+      src="/assets/gopher-63.svg"
+      width="72"
+      height="72"
+      alt="go.mod Lens gopher mascot"
+      loading="lazy"
+      decoding="async"
     >
-      <img
-        class="attribution-mascot"
-        src="/assets/gopher-63.svg"
-        width="72"
-        height="72"
-        alt="go.mod Lens gopher mascot"
-        loading="lazy"
-        decoding="async"
-      >
-    </a>
+  </summary>
+  <div class="attribution-content">
     <p class="data-attribution">
       Module metadata from
       <a href="https://proxy.golang.org/" target="_blank" rel="noreferrer">Go module mirror</a>;
@@ -95,8 +92,9 @@
       suggestions from
       <a href="https://docs.github.com/en/rest/search/search" target="_blank" rel="noreferrer">GitHub Search</a>.
     </p>
+    {{template "githubLink" .}}
   </div>
-</div>{{end}}
+</details>{{end}}
 
 {{define "sidebarPanel"}}<div class="infoBox">
   <a href="#" class="hide-info-box">show graph</a>

@@ -91,7 +91,7 @@ func TestGraphErrorFragmentEscapesMessage(t *testing.T) {
 	}
 }
 
-func TestIndexPageShowsLinkedMascotOnInitialLoad(t *testing.T) {
+func TestIndexPageStartsWithCollapsedMascot(t *testing.T) {
 	t.Parallel()
 
 	var body bytes.Buffer
@@ -101,10 +101,12 @@ func TestIndexPageShowsLinkedMascotOnInitialLoad(t *testing.T) {
 
 	rendered := body.String()
 	for _, want := range []string{
-		`class="panel-intro"`,
-		`class="attribution-mascot-link"`,
+		`class="panel-intro">`,
+		`class="attribution-toggle"`,
 		`href="https://github.com/amer8/gomod-lens"`,
-		`aria-label="Open gomod-lens repository on GitHub"`,
+		`aria-label="Project information"`,
+		`id="lens-toolbar" aria-label="Lens selection" hidden`,
+		`id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="left-panel" aria-expanded="true" aria-label="Hide sidebar"`,
 		`src="/assets/gopher-63.svg"`,
 		`aria-label="Contribute to gomod-lens on GitHub"`,
 		`<span class="github-link-label">Contribute</span>`,
@@ -114,16 +116,23 @@ func TestIndexPageShowsLinkedMascotOnInitialLoad(t *testing.T) {
 		}
 	}
 
+	attributionEnd := strings.Index(rendered, "</details>")
+	contributeIndex := strings.Index(rendered, `class="github-link"`)
+	if contributeIndex < strings.Index(rendered, `class="attribution-content"`) || contributeIndex > attributionEnd {
+		t.Fatalf("Contribute link should be inside the collapsed project information: %s", rendered)
+	}
+
 	searchIndex := strings.Index(rendered, `id="search-form"`)
 	attributionIndex := strings.Index(rendered, `class="panel-intro"`)
 	emptyResultIndex := strings.Index(rendered, `id="graph-result" data-state="empty"`)
 	if searchIndex < 0 || attributionIndex < 0 || emptyResultIndex < 0 ||
-		searchIndex > attributionIndex || attributionIndex > emptyResultIndex {
-		t.Fatalf("initial attribution should render between search and empty graph result: %s", rendered)
+		searchIndex > emptyResultIndex || emptyResultIndex > attributionIndex ||
+		!strings.Contains(rendered[emptyResultIndex:attributionIndex], "</div>\n      </div>") {
+		t.Fatalf("initial attribution should render outside and after the sidebar: %s", rendered)
 	}
 }
 
-func TestGraphFragmentShowsRelationGroupsBelowPersistentPanelIntro(t *testing.T) {
+func TestGraphFragmentKeepsPersistentAttributionOutsideSidebarSwap(t *testing.T) {
 	t.Parallel()
 
 	g := graph.Graph{
@@ -145,7 +154,7 @@ func TestGraphFragmentShowsRelationGroupsBelowPersistentPanelIntro(t *testing.T)
 	}
 
 	rendered := body.String()
-	if strings.Contains(rendered, `class="attribution-mascot-link"`) {
+	if strings.Contains(rendered, `class="attribution-toggle"`) {
 		t.Fatalf("graph fragment should not duplicate persistent attribution block: %s", rendered)
 	}
 	if !strings.Contains(rendered, `<h4>Relation groups</h4>`) {

@@ -39,7 +39,8 @@ generated copy at `dist/assets/vendor/LICENSES.txt`.
 | Service | Use | Terms or License Notes |
 | --- | --- | --- |
 | [Go module mirror](https://proxy.golang.org/) | Resolves public module versions, `go.mod` files, and release freshness metadata | Subject to the Go module services privacy policy |
-| [deps.dev](https://deps.dev/) | Provides OpenSSF Scorecard and project metadata | deps.dev generated data is available under CC-BY 4.0; API use is subject to the Google API Terms of Service |
+| [deps.dev](https://deps.dev/) | Provides OpenSSF Scorecard, project metadata, and exact-version license expressions | deps.dev generated data is available under CC-BY 4.0; API use is subject to the Google API Terms of Service |
+| [OSV](https://osv.dev/) | Matches exact public Go module versions to advisory records when the vulnerability lens is enabled | Advisory content comes from the original databases; preserve IDs and source links. [API documentation](https://google.github.io/osv.dev/api/) |
 | [GitHub REST Search](https://docs.github.com/en/rest/search/search) | Provides module search suggestions | Subject to GitHub API terms and rate limits |
 
 ## Marks

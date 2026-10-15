@@ -14,6 +14,7 @@ let graph = null
 let graphData = null
 let selectedNodeId = ''
 let activeLensID = 'openssf'
+let analysisColors = null
 let highlightRequest = null
 let onNodeSelected = null
 let bfsDistances = new Map()
@@ -228,6 +229,7 @@ export function disposeGraph() {
   edgeCol = null
   graph = null
   graphData = null
+  analysisColors = null
   selectedNodeId = ''
   highlightRequest = null
   onNodeSelected = null
@@ -424,7 +426,13 @@ function nodeFill(data, ctx) {
   return lensNodeFill(node, ctx)
 }
 
+export function setAnalysisColors(colors) {
+  analysisColors = colors
+  setGraphLens(activeLensID)
+}
+
 function lensNodeFill(node, ctx = null) {
+  if (analysisColors) return ctx?.dimmed ? '#50586a' : analysisColors[node?.id] || '#8b95a7'
   if (activeLensID === 'release-freshness') {
     return releaseFreshnessNodeFill(node, ctx)
   }

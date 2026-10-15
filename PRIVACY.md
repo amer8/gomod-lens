@@ -1,6 +1,6 @@
 # Privacy and External Services
 
-Last updated: October 14, 2026
+Last updated: October 15, 2026
 
 go.mod Lens is intended for exploring public Go modules. Do not enter private
 module paths, secret repository names, access tokens, or other non-public
@@ -36,6 +36,22 @@ paths, versions, and project identifiers derived from those modules.
 deps.dev generated data is available under CC-BY 4.0, and use of the deps.dev
 API is subject to the Google API Terms of Service:
 <https://docs.deps.dev/api/v3/>
+
+When enabled in a build, Scorecard details and license evidence retrieve public
+repository reports and exact-version license metadata directly from
+`api.deps.dev` in the visitor’s browser when their lens is opened. Successful
+responses are cached in page memory for five minutes; Refresh clears this cache.
+
+### OSV advisory lookup
+
+When the vulnerability exposure lens is enabled and opened, both the server UI
+and static UI send public module names and exact resolved versions directly
+from the visitor’s browser to `api.osv.dev`. Public replacement identities are
+used when available. No source files are uploaded. Requests use at most four
+concurrent lookups, a 20-second timeout, and a five-minute page-memory cache.
+Failures remain unknown and Refresh retries the source.
+
+OSV API documentation: <https://google.github.io/osv.dev/api/>
 
 ### GitHub Search
 

@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   go:
-    name: Go checks
+    name: Go and browser checks
     runs-on: ubuntu-latest
 
     steps:
@@ -23,6 +23,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Download modules
         run: go mod download
@@ -51,3 +56,6 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+      - name: Test browser logic and asset parity
+        run: make test-js

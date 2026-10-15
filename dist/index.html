@@ -7,6 +7,7 @@
     <meta name="description" content="Visualization of Go module dependencies inspired by npm.anvaka.com">
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="./assets/main.css">
+    <link rel="stylesheet" href="./assets/analysis/analysis.css">
     <script type="importmap">
       {
         "imports": {
@@ -20,6 +21,10 @@
   <body>
     <div id="app" class="full">
       <div id="graph-canvas" class="graph-empty"></div>
+      <nav id="lens-toolbar" aria-label="Lens selection" hidden></nav>
+      <button id="sidebar-toggle" class="sidebar-toggle" type="button" aria-controls="left-panel" aria-expanded="true" aria-label="Hide sidebar" title="Hide sidebar" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+      </button>
       <div id="left-panel" class="left-panel left-panel-empty">
         <div id="navbar-component" class="navbar-component navbar-component-empty">
           <form id="search-form" class="search" role="search">
@@ -50,55 +55,48 @@
             <div id="error-message" class="error-message"></div>
           </div>
         </div>
-        <div class="panel-intro">
-          <div class="attribution-row panel-attribution">
-            <a
-              class="attribution-mascot-link"
-              href="https://github.com/amer8/gomod-lens"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Open gomod-lens repository on GitHub"
-              title="Open repository on GitHub"
-            >
-              <img
-                class="attribution-mascot"
-                src="./assets/gopher-63.svg"
-                width="72"
-                height="72"
-                alt="go.mod Lens gopher mascot"
-                loading="lazy"
-                decoding="async"
-              >
-            </a>
-            <p class="data-attribution">
-              Module metadata from
-              <a href="https://proxy.golang.org/" target="_blank" rel="noreferrer">Go module mirror</a>;
-              <a href="https://securityscorecards.dev/" target="_blank" rel="noreferrer">OpenSSF Scorecard</a>
-              scores and project metadata from
-              <a href="https://deps.dev/" target="_blank" rel="noreferrer">deps.dev</a>;
-              suggestions from
-              <a href="https://docs.github.com/en/rest/search/search" target="_blank" rel="noreferrer">GitHub Search</a>.
-            </p>
-          </div>
-        </div>
         <div id="graph-result" data-state="empty"></div>
       </div>
-      <a
-        class="github-link"
-        href="https://github.com/amer8/gomod-lens"
-        target="_blank"
-        rel="noreferrer"
-        aria-label="Contribute to gomod-lens on GitHub"
-        title="Contribute on GitHub"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <path
-            fill="currentColor"
-            d="M12 2C6.48 2 2 6.58 2 12.26c0 4.54 2.87 8.39 6.84 9.75.5.09.68-.22.68-.49 0-.24-.01-.89-.01-1.75-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.08 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.31.1-2.72 0 0 .84-.28 2.75 1.05A9.36 9.36 0 0 1 12 6.97c.85 0 1.71.12 2.51.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.64 1.03 2.76 0 3.95-2.34 4.82-4.57 5.07.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.8 0 .27.18.59.69.49A10.06 10.06 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"
-          ></path>
-        </svg>
-        <span class="github-link-label">Contribute</span>
-      </a>
+      <details class="panel-intro">
+        <summary class="attribution-toggle" aria-label="Project information" title="Show or hide project information">
+          <img
+            class="attribution-mascot"
+            src="./assets/gopher-63.svg"
+            width="72"
+            height="72"
+            alt="go.mod Lens gopher mascot"
+            loading="lazy"
+            decoding="async"
+          >
+        </summary>
+        <div class="attribution-content">
+          <p class="data-attribution">
+            Module metadata from
+            <a href="https://proxy.golang.org/" target="_blank" rel="noreferrer">Go module mirror</a>;
+            <a href="https://securityscorecards.dev/" target="_blank" rel="noreferrer">OpenSSF Scorecard</a>
+            scores and project metadata from
+            <a href="https://deps.dev/" target="_blank" rel="noreferrer">deps.dev</a>;
+            suggestions from
+            <a href="https://docs.github.com/en/rest/search/search" target="_blank" rel="noreferrer">GitHub Search</a>.
+          </p>
+          <a
+            class="github-link"
+            href="https://github.com/amer8/gomod-lens"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="Contribute to gomod-lens on GitHub"
+            title="Contribute on GitHub"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path
+                fill="currentColor"
+                d="M12 2C6.48 2 2 6.58 2 12.26c0 4.54 2.87 8.39 6.84 9.75.5.09.68-.22.68-.49 0-.24-.01-.89-.01-1.75-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.49-1.11-1.49-.91-.64.07-.63.07-.63 1 .07 1.53 1.06 1.53 1.06.89 1.56 2.34 1.11 2.91.85.09-.66.35-1.11.63-1.37-2.22-.26-4.56-1.14-4.56-5.08 0-1.12.39-2.04 1.03-2.76-.1-.26-.45-1.31.1-2.72 0 0 .84-.28 2.75 1.05A9.36 9.36 0 0 1 12 6.97c.85 0 1.71.12 2.51.35 1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.46.1 2.72.64.72 1.03 1.64 1.03 2.76 0 3.95-2.34 4.82-4.57 5.07.36.32.68.94.68 1.9 0 1.37-.01 2.47-.01 2.8 0 .27.18.59.69.49A10.06 10.06 0 0 0 22 12.26C22 6.58 17.52 2 12 2Z"
+              ></path>
+            </svg>
+            <span class="github-link-label">Contribute</span>
+          </a>
+        </div>
+      </details>
     </div>
     <script src="./assets/wasm_exec.js"></script>
     <script type="module" src="./assets/app-static.js"></script>

@@ -4,8 +4,9 @@ Thanks for taking the time to improve go.mod Lens.
 
 ## Development Setup
 
-You need Go 1.26 or newer. The server-rendered UI uses Go's standard
-`html/template` package.
+You need Go 1.26 or newer and Node.js 22 or newer for browser tests. The
+server-rendered UI uses Go's standard `html/template` package. No npm install
+or JavaScript build step is required.
 
 Run the app locally:
 
@@ -19,6 +20,7 @@ Run tests with repo-local cache directories:
 
 ```bash
 make test
+make test-js
 ```
 
 ## Static Build
@@ -48,15 +50,25 @@ used to inspect server files or private workspace state.
 
 ## Adding Lenses
 
-Lenses are Go implementations of the `graph.Lens` interface. A lens receives an
-already-built module graph and attaches results to nodes with
-`Node.SetLensResult`. Built-in lenses are registered by `graph.NewAnalyzer`; the
-OpenSSF Scorecard and Release Freshness lenses are the first examples.
+There are two extension layers:
+
+- **Graph enrichment (Go):** `graph.Lens` implementations attach per-node
+  results with `Node.SetLensResult`. `graph.NewAnalyzer` registers the server's
+  built-in Scorecard and Freshness implementations. The WASM resolver has
+  corresponding enrichment paths under `internal/staticresolver`.
+- **Browser views (JavaScript):** the four interactive lenses share the
+  interface in `internal/app/web/static/analysis/types.js` and are registered in
+  `analysis/registry.js`. Scorecard details, vulnerability matches and license
+  evidence fetch additional data in the browser; Freshness reads the graph.
+  Browser-only results are not added to `/api/graph` responses.
+
+Follow the [lens architecture and contributor walkthrough](docs/development/lenses.md)
+for the contract, a minimal browser lens, registration, Web/WASM asset mirroring,
+and testing. Adding a browser-only view does not require a Go lens. A Go lens
+that needs an interactive browser view also needs a browser registration.
 
 Keep a new lens narrowly focused, give it a stable lowercase ID, and document
 any upstream services it calls in `PRIVACY.md` and `THIRD_PARTY_NOTICES.md`.
-If a lens is useful in the static WebAssembly build, add the corresponding
-browser resolver path under `internal/staticresolver` too.
 
 ## Before Opening a Pull Request
 
@@ -65,6 +77,10 @@ Please run the same checks used by CI:
 ```bash
 make check
 ```
+
+This includes Go formatting/module checks, WASM compilation, vet, Go tests and
+the Node.js browser tests. For a browser-only change, `make test-js` provides a
+fast check; still run `make check` before opening a pull request.
 
 ## Project Notes
 
