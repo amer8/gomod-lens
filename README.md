@@ -4,8 +4,8 @@
 
 `gomod-lens` explores public Go module dependency graphs in a browser. It can
 run as a Go web server or as a static WebAssembly build, and analyzes modules
-through composable lenses. Built-in lenses currently cover OpenSSF Scorecard
-data from deps.dev and release freshness from the Go module mirror.
+through four browser lenses: OpenSSF Scorecard, Release Freshness,
+Vulnerability exposure and License evidence.
 
 Deployed to GitHub Pages: https://amer8.github.io/gomod-lens/
 
@@ -18,15 +18,38 @@ and the static WebAssembly build.
 
 ## Lenses
 
-Lenses attach focused analysis results to each module in the graph. OpenSSF
-Scorecard highlights security and supply-chain health, while Release Freshness
+OpenSSF Scorecard highlights repository security practices. Release Freshness
 shows whether selected versions are current, patch/minor/major behind,
-pre-release, pseudo-version, or unknown. The graph model carries both lens
-metadata and per-node lens results so contributors can add more lenses over time.
+pre-release, pseudo-version, or unknown. Vulnerability exposure matches exact
+module versions against OSV advisories. License evidence displays expressions
+observed by deps.dev for exact module versions.
+
+Go graph enrichment supplies Scorecard summaries and release freshness in the
+graph payload. The browser adds Scorecard check details, vulnerability matches
+and license evidence when those views are opened. These browser observations
+are not included in `/api/graph`. Both layers can be extended; see the
+[lens developer guide](docs/development/lenses.md).
+
+## Scorecard details
+
+The Scorecard lens shows the selected module’s source repository report with
+individual check scores, explanations, evidence, assessed commit, date and
+Scorecard version. Choose a graph node or the module selector to inspect it.
+Filter checks by name or availability and expand a check for remediation links.
+Unknown checks remain unknown. Reports describe a repository snapshot and may
+postdate the selected module release.
 
 ## Development
 
+The four browser lenses use Repository on graph (Scorecard), Update queues
+(Freshness), Result groups (vulnerabilities), and Evidence inventory (licenses).
+They work in both the Go web UI and static WASM build. See the
+[analysis views and reproduction steps](docs/features/analysis-views.md).
+
 Run `make help` for the full target list.
+
+Development requires Go 1.26+ and Node.js 22+ for tests, without an npm build.
+`make check` runs Go/WASM checks and the browser logic and asset parity tests.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
 

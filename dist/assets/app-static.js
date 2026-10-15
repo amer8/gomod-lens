@@ -1,6 +1,9 @@
+import './sidebar.js'
+import { createAnalysisViews } from './analysis/index.js'
 import { createModuleVersionPicker } from './module-versions.js'
 import {
   applyHighlightRequest,
+  setAnalysisColors,
   clearGraph,
   renderGraph,
   selectNode,
@@ -36,6 +39,7 @@ let moduleSuggestions = []
 let activeModuleSuggestion = -1
 
 const versionPicker = createModuleVersionPicker(elements.form, elements.input)
+const analysisViews = createAnalysisViews({selectNode, setColors:setAnalysisColors, highlight:applyHighlightRequest})
 
 setupModuleSuggestions()
 
@@ -140,6 +144,7 @@ function syncFromHash() {
 
 function resetGraph() {
   versionPicker.clear()
+  analysisViews.loading()
   graphController?.abort()
   graphController = null
   setLoading(false)
@@ -195,6 +200,7 @@ function syncResolvedTarget(target) {
 
 async function loadGraph(target) {
   versionPicker.loading()
+  analysisViews.loading()
   graphController?.abort()
   graphController = new AbortController()
 
@@ -220,6 +226,7 @@ async function loadGraph(target) {
     renderGraph(elements.graphCanvas, payload, {
       onNodeSelected: (node) => {
         selectNode(node?.id || '')
+          analysisViews.select(node)
       },
     })
     setGraphLens(activeLensID())
@@ -227,6 +234,7 @@ async function loadGraph(target) {
     setError('')
     setGraphLoaded(true)
     void versionPicker.capture(payload)
+    void analysisViews.capture(payload)
   } catch (error) {
     if (error?.name === 'AbortError') return
     versionPicker.clear()
@@ -429,7 +437,7 @@ function activateLensPanel(lensID) {
   const result = document.getElementById('graph-result')
   if (!result) return
 
-  const buttons = result.querySelectorAll('[data-lens-panel-target]')
+  const buttons = document.querySelectorAll('#lens-toolbar [data-lens-panel-target]')
   const panels = result.querySelectorAll('[data-lens-panel]')
   buttons.forEach((button) => {
     const active = button.dataset.lensPanelTarget === lensID
@@ -447,8 +455,7 @@ function activateLensPanel(lensID) {
 }
 
 function activeLensID() {
-  const result = document.getElementById('graph-result')
-  const activeButton = result?.querySelector('[data-lens-panel-target].lens-circle-active')
+  const activeButton = document.querySelector('#lens-toolbar [data-lens-panel-target].lens-circle-active')
   return activeButton?.dataset.lensPanelTarget || 'openssf'
 }
 
