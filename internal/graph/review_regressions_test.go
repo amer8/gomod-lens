@@ -6,7 +6,7 @@ import (
 )
 
 func TestPrereleaseIdentifiersPreserveHyphens(t *testing.T) {
-	ordered := []string{"v1.0.0-alpha", "v1.0.0-alpha.1", "v1.0.0-alpha.beta", "v1.0.0-beta", "v1.0.0-beta.2", "v1.0.0-beta.11", "v1.0.0-rc.1", "v1.0.0-rc-1", "v1.0.0"}
+	ordered := []string{"v1.0.0-alpha", "v1.0.0-alpha.1", "v1.0.0-alpha.beta", "v1.0.0-beta", "v1.0.0-beta.2", "v1.0.0-beta.11", "v1.0.0-beta.9223372036854775808", "v1.0.0-beta.10000000000000000000", "v1.0.0-rc.1", "v1.0.0-rc-1", "v1.0.0"}
 	for i, left := range ordered {
 		for j, right := range ordered {
 			got := compareModuleVersions(left, right)

@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/amer8/gomod-lens/internal/semver"
 )
 
 const (
@@ -432,36 +434,7 @@ func compareModuleVersions(left, right string) int {
 }
 
 func compareModulePrerelease(left, right string) int {
-	a := splitModulePrerelease(left)
-	b := splitModulePrerelease(right)
-	length := max(len(b), len(a))
-
-	for i := 0; i < length; i++ {
-		if i >= len(a) {
-			return -1
-		}
-		if i >= len(b) {
-			return 1
-		}
-
-		leftNumber, leftOK := parseModuleVersionNumber(a[i])
-		rightNumber, rightOK := parseModuleVersionNumber(b[i])
-		switch {
-		case leftOK && rightOK && leftNumber != rightNumber:
-			return leftNumber - rightNumber
-		case leftOK && !rightOK:
-			return -1
-		case !leftOK && rightOK:
-			return 1
-		case a[i] != b[i]:
-			return strings.Compare(a[i], b[i])
-		}
-	}
-	return 0
-}
-
-func splitModulePrerelease(value string) []string {
-	return strings.Split(value, ".")
+	return semver.ComparePrerelease(left, right)
 }
 
 func isPseudoModuleVersion(version string) bool {

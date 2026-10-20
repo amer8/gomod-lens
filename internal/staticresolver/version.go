@@ -3,6 +3,8 @@ package staticresolver
 import (
 	"strconv"
 	"strings"
+
+	"github.com/amer8/gomod-lens/internal/semver"
 )
 
 type goVersion struct {
@@ -103,34 +105,5 @@ func compareGoVersions(left, right string) int {
 }
 
 func comparePrerelease(left, right string) int {
-	a := splitPrerelease(left)
-	b := splitPrerelease(right)
-	length := max(len(b), len(a))
-
-	for i := 0; i < length; i++ {
-		if i >= len(a) {
-			return -1
-		}
-		if i >= len(b) {
-			return 1
-		}
-
-		leftNumber, leftOK := parseVersionNumber(a[i])
-		rightNumber, rightOK := parseVersionNumber(b[i])
-		switch {
-		case leftOK && rightOK && leftNumber != rightNumber:
-			return leftNumber - rightNumber
-		case leftOK && !rightOK:
-			return -1
-		case !leftOK && rightOK:
-			return 1
-		case a[i] != b[i]:
-			return strings.Compare(a[i], b[i])
-		}
-	}
-	return 0
-}
-
-func splitPrerelease(value string) []string {
-	return strings.Split(value, ".")
+	return semver.ComparePrerelease(left, right)
 }

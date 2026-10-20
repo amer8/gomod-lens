@@ -302,7 +302,8 @@ func (r *Resolver) resolveVersionInfo(ctx context.Context, path, version string)
 }
 
 func (r *Resolver) resolveBuildList(ctx context.Context, root moduleRef, rootReplacements []replacement, rootExclusions map[string]bool, progress *progressReporter) (buildResolution, error) {
-	rootMeta, err := r.loadSelectedGoMod(ctx, root, rootReplacements)
+	// Replacements affect required dependency versions, not the main module.
+	rootMeta, err := r.loadGoMod(ctx, root.Path, root.Version)
 	if err != nil {
 		return buildResolution{}, err
 	}
@@ -332,7 +333,7 @@ func (r *Resolver) resolveBuildList(ctx context.Context, root moduleRef, rootRep
 func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, rootMeta moduleMeta, rootRequirements []requirement, rootReplacements []replacement, rootExclusions map[string]bool, progress *progressReporter) (buildResolution, error) {
 	resolution := buildResolution{
 		selected: map[string]string{root.Path: root.Version},
-		loaded:   map[string]moduleMeta{root.ID: rootMeta},
+		loaded:   make(map[string]moduleMeta),
 	}
 
 	loadModes := make(map[string]loadCandidate)
@@ -414,6 +415,10 @@ func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, root
 		}
 	}
 
+	// A dependency can require the same version as the analyzed root and apply
+	// a replacement to that version. Traverse its metadata independently, then
+	// restore the main module's own metadata for the displayed root node.
+	resolution.loaded[root.ID] = rootMeta
 	return resolution, nil
 }
 
@@ -535,7 +540,10 @@ func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarg
 
 	degrees := computeDegrees(edges)
 	for _, entry := range selectedEntries {
-		replacement := replacementFor(entry.Path, entry.Version, rootReplacements)
+		var rule *replacement
+		if entry.Path != root.Path {
+			rule = replacementFor(entry.Path, entry.Version, rootReplacements)
+		}
 		nodes = append(nodes, graph.Node{
 			ID:          entry.ID,
 			Name:        entry.Path,
@@ -543,8 +551,8 @@ func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarg
 			Root:        entry.Path == root.Path,
 			Main:        entry.Path == root.Path,
 			Direct:      entry.Path != root.Path && rootDirectPaths[entry.Path],
-			Replaced:    replacement != nil,
-			Replacement: replacementTargetID(replacement),
+			Replaced:    rule != nil,
+			Replacement: replacementTargetID(rule),
 			InDegree:    degrees.in[entry.ID],
 			OutDegree:   degrees.out[entry.ID],
 		})
