@@ -338,7 +338,7 @@ func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, root
 	loadModes := make(map[string]loadCandidate)
 	rootPruning := pruningForGoDirective(rootMeta.GoVersion)
 	for _, requirement := range rootRequirements {
-		if selectRequirement(resolution.selected, requirement, rootExclusions) {
+		if selectRequirement(resolution.selected, requirement, rootExclusions, root.Path) {
 			if len(resolution.selected) > maxSelectedModules {
 				return buildResolution{}, fmt.Errorf("module graph is too large to resolve in the browser (%d modules)", len(resolution.selected))
 			}
@@ -402,7 +402,7 @@ func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, root
 				nextPruning = pruningUnpruned
 			}
 			for _, requirement := range meta.Requires {
-				if selectRequirement(resolution.selected, requirement, rootExclusions) {
+				if selectRequirement(resolution.selected, requirement, rootExclusions, root.Path) {
 					if len(resolution.selected) > maxSelectedModules {
 						return buildResolution{}, fmt.Errorf("module graph is too large to resolve in the browser (%d modules)", len(resolution.selected))
 					}
@@ -621,7 +621,12 @@ func pendingLoadSnapshot(loadModes map[string]loadCandidate, processed map[strin
 	return entries
 }
 
-func selectRequirement(selected map[string]string, requirement requirement, exclusions map[string]bool) bool {
+func selectRequirement(selected map[string]string, requirement requirement, exclusions map[string]bool, rootPath string) bool {
+	// The analyzed root acts as Go's main module. Other versions of its path
+	// may contribute requirements, but cannot replace the requested version.
+	if requirement.Path == rootPath {
+		return false
+	}
 	if isPseudoModulePath(requirement.Path) || requirement.Version == "" || isRequirementExcluded(requirement, exclusions) {
 		return false
 	}
