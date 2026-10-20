@@ -26,7 +26,13 @@ type GoProxyReleaseFreshnessProvider struct {
 	client      *http.Client
 	concurrency int
 	cacheMu     sync.RWMutex
-	cache       map[string]string
+	cache       map[string]cachedReleaseVersion
+	now         func() time.Time
+}
+
+type cachedReleaseVersion struct {
+	version   string
+	expiresAt time.Time
 }
 
 // NewGoProxyReleaseFreshnessProvider creates a Go-proxy-backed freshness provider.
@@ -40,7 +46,8 @@ func NewGoProxyReleaseFreshnessProvider(client *http.Client, concurrency int) *G
 	return &GoProxyReleaseFreshnessProvider{
 		client:      client,
 		concurrency: concurrency,
-		cache:       make(map[string]string),
+		cache:       make(map[string]cachedReleaseVersion),
+		now:         time.Now,
 	}
 }
 
@@ -93,14 +100,17 @@ func (p *GoProxyReleaseFreshnessProvider) FetchReleaseFreshness(ctx context.Cont
 func (p *GoProxyReleaseFreshnessProvider) cached(module string) (string, bool) {
 	p.cacheMu.RLock()
 	defer p.cacheMu.RUnlock()
-	latest, ok := p.cache[module]
-	return latest, ok
+	entry, ok := p.cache[module]
+	if !ok || !p.now().Before(entry.expiresAt) {
+		return "", false
+	}
+	return entry.version, true
 }
 
 func (p *GoProxyReleaseFreshnessProvider) setCached(module, latest string) {
 	p.cacheMu.Lock()
 	defer p.cacheMu.Unlock()
-	p.cache[module] = latest
+	p.cache[module] = cachedReleaseVersion{version: latest, expiresAt: p.now().Add(mutableLensCacheTTL)}
 }
 
 func (p *GoProxyReleaseFreshnessProvider) fetchLatestReleaseVersion(ctx context.Context, module string) (string, error) {

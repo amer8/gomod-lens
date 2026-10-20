@@ -302,19 +302,42 @@ func (r *Resolver) resolveVersionInfo(ctx context.Context, path, version string)
 }
 
 func (r *Resolver) resolveBuildList(ctx context.Context, root moduleRef, rootReplacements []replacement, rootExclusions map[string]bool, progress *progressReporter) (buildResolution, error) {
-	resolution := buildResolution{
-		selected: map[string]string{root.Path: root.Version},
-		loaded:   make(map[string]moduleMeta),
-	}
 	rootMeta, err := r.loadSelectedGoMod(ctx, root, rootReplacements)
 	if err != nil {
 		return buildResolution{}, err
 	}
-	resolution.loaded[root.ID] = rootMeta
+	requirements := append([]requirement(nil), rootMeta.Requires...)
+	for {
+		resolution, err := r.resolveRequirements(ctx, root, rootMeta, requirements, rootReplacements, rootExclusions, progress)
+		if err != nil || pruningForGoDirective(rootMeta.GoVersion) == pruningUnpruned {
+			return resolution, err
+		}
+		// Go expands inconsistent pruned roots at their selected versions and
+		// rebuilds the graph. Constraints from discarded modern root versions
+		// must not survive that rebuild; legacy traversal still retains them.
+		changed := false
+		for i := range requirements {
+			selected := resolution.selected[requirements[i].Path]
+			if selected != "" && selected != requirements[i].Version && !isRequirementExcluded(requirements[i], rootExclusions) {
+				requirements[i].Version = selected
+				changed = true
+			}
+		}
+		if !changed {
+			return resolution, nil
+		}
+	}
+}
 
-	loadModes := make(map[string]modulePruning)
+func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, rootMeta moduleMeta, rootRequirements []requirement, rootReplacements []replacement, rootExclusions map[string]bool, progress *progressReporter) (buildResolution, error) {
+	resolution := buildResolution{
+		selected: map[string]string{root.Path: root.Version},
+		loaded:   map[string]moduleMeta{root.ID: rootMeta},
+	}
+
+	loadModes := make(map[string]loadCandidate)
 	rootPruning := pruningForGoDirective(rootMeta.GoVersion)
-	for _, requirement := range rootMeta.Requires {
+	for _, requirement := range rootRequirements {
 		if selectRequirement(resolution.selected, requirement, rootExclusions) {
 			if len(resolution.selected) > maxSelectedModules {
 				return buildResolution{}, fmt.Errorf("module graph is too large to resolve in the browser (%d modules)", len(resolution.selected))
@@ -332,7 +355,7 @@ func (r *Resolver) resolveBuildList(ctx context.Context, root moduleRef, rootRep
 			return buildResolution{}, err
 		}
 		pass++
-		snapshot := pendingLoadSnapshot(resolution.selected, loadModes, processed)
+		snapshot := pendingLoadSnapshot(loadModes, processed)
 		if len(snapshot) == 0 {
 			break
 		}
@@ -584,21 +607,13 @@ func selectedSnapshot(selected map[string]string) []moduleRef {
 	return entries
 }
 
-func pendingLoadSnapshot(selected map[string]string, loadModes map[string]modulePruning, processed map[string]modulePruning) []loadCandidate {
+func pendingLoadSnapshot(loadModes map[string]loadCandidate, processed map[string]modulePruning) []loadCandidate {
 	entries := make([]loadCandidate, 0, len(loadModes))
-	for path, pruning := range loadModes {
-		version := selected[path]
-		if version == "" {
+	for id, entry := range loadModes {
+		if done, ok := processed[id]; ok && done >= entry.pruning {
 			continue
 		}
-		id := moduleID(path, version)
-		if done, ok := processed[id]; ok && done >= pruning {
-			continue
-		}
-		entries = append(entries, loadCandidate{
-			moduleRef: moduleRef{Path: path, Version: version, ID: id},
-			pruning:   pruning,
-		})
+		entries = append(entries, entry)
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].ID < entries[j].ID
@@ -618,12 +633,16 @@ func selectRequirement(selected map[string]string, requirement requirement, excl
 	return false
 }
 
-func markLoadMode(loadModes map[string]modulePruning, requirement requirement, pruning modulePruning, exclusions map[string]bool) {
+func markLoadMode(loadModes map[string]loadCandidate, requirement requirement, pruning modulePruning, exclusions map[string]bool) {
 	if isPseudoModulePath(requirement.Path) || requirement.Version == "" || isRequirementExcluded(requirement, exclusions) {
 		return
 	}
-	if current, ok := loadModes[requirement.Path]; !ok || pruning > current {
-		loadModes[requirement.Path] = pruning
+	id := moduleID(requirement.Path, requirement.Version)
+	if current, ok := loadModes[id]; !ok || pruning > current.pruning {
+		loadModes[id] = loadCandidate{
+			moduleRef: moduleRef{Path: requirement.Path, Version: requirement.Version, ID: id},
+			pruning:   pruning,
+		}
 	}
 }
 
@@ -817,13 +836,20 @@ func isLocalReplacementTarget(target string) bool {
 }
 
 func replacementFor(path, version string, replacements []replacement) *replacement {
+	var wildcard *replacement
 	for i := range replacements {
 		replacement := &replacements[i]
-		if replacement.OldPath == path && (replacement.OldVersion == "" || replacement.OldVersion == version) {
+		if replacement.OldPath != path {
+			continue
+		}
+		if replacement.OldVersion == version && version != "" {
 			return replacement
 		}
+		if replacement.OldVersion == "" {
+			wildcard = replacement
+		}
 	}
-	return nil
+	return wildcard
 }
 
 func replacementTargetID(replacement *replacement) string {

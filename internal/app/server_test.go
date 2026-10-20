@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -454,13 +456,16 @@ func TestGraphEndpointResolvesShortModuleTarget(t *testing.T) {
 	t.Parallel()
 
 	rootDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(rootDir, "go.mod"), []byte("module github.com/gin-gonic/gin\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	analyzer := graph.NewAnalyzer(fakeRunner(func(_ context.Context, workdir string, _ []string, name string, args ...string) ([]byte, error) {
 		command := strings.Join(append([]string{name}, args...), " ")
 		switch command {
 		case "go get github.com/gin-gonic/gin@latest":
 			return nil, nil
 		case "go list -m -json all":
-			if workdir == rootDir {
+			if filepath.Base(workdir) == "analysis" {
 				return fmt.Appendf(nil, `{"Path":"github.com/gin-gonic/gin","Main":true,"Dir":%q}`, rootDir), nil
 			}
 			return []byte(strings.Join([]string{
@@ -468,12 +473,12 @@ func TestGraphEndpointResolvesShortModuleTarget(t *testing.T) {
 				fmt.Sprintf(`{"Path":"github.com/gin-gonic/gin","Version":"v1.10.0","Dir":%q}`, rootDir),
 			}, "\n")), nil
 		case "go mod edit -json":
-			if workdir == rootDir {
+			if filepath.Base(workdir) == "analysis" {
 				return []byte(`{}`), nil
 			}
 			return []byte(`{"Require":[{"Path":"github.com/gin-gonic/gin","Version":"v1.10.0","Indirect":true}]}`), nil
 		case "go mod graph":
-			if workdir != rootDir {
+			if filepath.Base(workdir) != "analysis" {
 				t.Fatalf("unexpected graph workdir: %s", workdir)
 			}
 			return nil, nil

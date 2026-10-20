@@ -461,9 +461,7 @@ func compareModulePrerelease(left, right string) int {
 }
 
 func splitModulePrerelease(value string) []string {
-	return strings.FieldsFunc(value, func(char rune) bool {
-		return char == '.' || char == '-'
-	})
+	return strings.Split(value, ".")
 }
 
 func isPseudoModuleVersion(version string) bool {
@@ -471,7 +469,9 @@ func isPseudoModuleVersion(version string) bool {
 	if parsed == nil || parsed.Prerelease == "" {
 		return false
 	}
-	for _, part := range splitModulePrerelease(parsed.Prerelease) {
+	// Pseudo-version timestamps use a hyphen before the revision, unlike the
+	// dot-delimited identifiers used for SemVer precedence.
+	for _, part := range strings.FieldsFunc(parsed.Prerelease, func(r rune) bool { return r == '.' || r == '-' }) {
 		if len(part) != 14 {
 			continue
 		}

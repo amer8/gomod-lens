@@ -132,7 +132,5 @@ func comparePrerelease(left, right string) int {
 }
 
 func splitPrerelease(value string) []string {
-	return strings.FieldsFunc(value, func(char rune) bool {
-		return char == '.' || char == '-'
-	})
+	return strings.Split(value, ".")
 }

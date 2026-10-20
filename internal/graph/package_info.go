@@ -117,6 +117,9 @@ func detectModuleLicense(dir string, cache map[string]string) string {
 		}
 
 		license := classifyLicenseText(string(raw))
+		if license == "unknown" {
+			continue
+		}
 		cache[dir] = license
 		return license
 	}

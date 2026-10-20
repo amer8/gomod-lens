@@ -182,26 +182,25 @@ type promiseResult struct {
 
 func awaitPromise(ctx context.Context, promise js.Value) (js.Value, error) {
 	ch := make(chan promiseResult, 1)
-	thenFunc := js.FuncOf(func(_ js.Value, args []js.Value) any {
-		select {
-		case ch <- promiseResult{value: args[0]}:
-		default:
-		}
+	var thenFunc, catchFunc js.Func
+	settle := func(result promiseResult) any {
+		// A canceled caller stops waiting, but JavaScript still owns these
+		// callbacks until settlement. Release them here on both outcomes.
+		thenFunc.Release()
+		catchFunc.Release()
+		ch <- result
 		return nil
+	}
+	thenFunc = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		return settle(promiseResult{value: args[0]})
 	})
-	catchFunc := js.FuncOf(func(_ js.Value, args []js.Value) any {
-		select {
-		case ch <- promiseResult{err: errorFromJS(args[0])}:
-		default:
-		}
-		return nil
+	catchFunc = js.FuncOf(func(_ js.Value, args []js.Value) any {
+		return settle(promiseResult{err: errorFromJS(args[0])})
 	})
-	promise.Call("then", thenFunc).Call("catch", catchFunc)
+	promise.Call("then", thenFunc, catchFunc)
 
 	select {
 	case result := <-ch:
-		thenFunc.Release()
-		catchFunc.Release()
 		return result.value, result.err
 	case <-ctx.Done():
 		return js.Undefined(), ctx.Err()

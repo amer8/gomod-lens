@@ -141,7 +141,8 @@ func TestAnalyzeIncludesOpenSSFDataByDefault(t *testing.T) {
 func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 	t.Parallel()
 
-	moduleDir := "/modcache/github.com/example/graph"
+	moduleDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(moduleDir, "go.mod"), "module github.com/example/graph\n")
 	runner := fakeRunner(func(_ context.Context, workdir string, _ []string, name string, args ...string) ([]byte, error) {
 		switch commandKey(name, args...) {
 		case "go get github.com/example/graph@latest":
@@ -154,7 +155,7 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 			}
 			return []byte(""), nil
 		case "go list -m -json all":
-			if workdir == moduleDir {
+			if filepath.Base(workdir) == "analysis" {
 				return []byte(strings.Join([]string{
 					fmt.Sprintf(`{"Path":"github.com/example/graph","Main":true,"Dir":%q}`, moduleDir),
 					`{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Dir":"/modcache/yaml"}`,
@@ -167,7 +168,7 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 				`{"Path":"example.com/temp-only","Version":"v0.1.0","Dir":"/modcache/temp-only"}`,
 			}, "\n")), nil
 		case "go mod graph":
-			if workdir != moduleDir {
+			if filepath.Base(workdir) != "analysis" {
 				t.Fatalf("unexpected module graph workdir: %s", workdir)
 			}
 			return []byte(strings.Join([]string{
@@ -176,7 +177,7 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 				"go.yaml.in/yaml/v3@v3.0.0 example.com/non-selected@v1.0.0",
 			}, "\n")), nil
 		case "go mod edit -json":
-			if workdir == moduleDir {
+			if filepath.Base(workdir) == "analysis" {
 				return []byte(`{"Require":[{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Indirect":false}]}`), nil
 			}
 			return []byte(`{"Require":[{"Path":"github.com/example/graph","Version":"v1.4.0","Indirect":true},{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Indirect":true},{"Path":"gopkg.in/check.v1","Version":"v0.0.0-20161208181325-20d25e280405","Indirect":true}]}`), nil
@@ -236,7 +237,8 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 func TestAnalyzeModuleRetriesDeclaredModulePath(t *testing.T) {
 	t.Parallel()
 
-	moduleDir := "/modcache/tailscale.com"
+	moduleDir := t.TempDir()
+	mustWriteFile(t, filepath.Join(moduleDir, "go.mod"), "module tailscale.com\n")
 	runner := fakeRunner(func(_ context.Context, workdir string, _ []string, name string, args ...string) ([]byte, error) {
 		switch commandKey(name, args...) {
 		case "go get github.com/tailscale/tailscale@latest":
@@ -259,7 +261,7 @@ func TestAnalyzeModuleRetriesDeclaredModulePath(t *testing.T) {
 			}
 			return nil, nil
 		case "go list -m -json all":
-			if workdir == moduleDir {
+			if filepath.Base(workdir) == "analysis" {
 				return []byte(strings.Join([]string{
 					fmt.Sprintf(`{"Path":"tailscale.com","Main":true,"Dir":%q}`, moduleDir),
 					`{"Path":"golang.org/x/sys","Version":"v0.37.0","Dir":"/modcache/sys"}`,
@@ -271,12 +273,12 @@ func TestAnalyzeModuleRetriesDeclaredModulePath(t *testing.T) {
 				`{"Path":"golang.org/x/sys","Version":"v0.37.0","Dir":"/modcache/sys"}`,
 			}, "\n")), nil
 		case "go mod graph":
-			if workdir != moduleDir {
+			if filepath.Base(workdir) != "analysis" {
 				t.Fatalf("unexpected module graph workdir: %s", workdir)
 			}
 			return []byte("tailscale.com golang.org/x/sys@v0.37.0\n"), nil
 		case "go mod edit -json":
-			if workdir == moduleDir {
+			if filepath.Base(workdir) == "analysis" {
 				return []byte(`{"Require":[{"Path":"golang.org/x/sys","Version":"v0.37.0","Indirect":false}]}`), nil
 			}
 			return []byte(`{"Require":[{"Path":"tailscale.com","Version":"v1.98.2","Indirect":false},{"Path":"golang.org/x/sys","Version":"v0.37.0","Indirect":true}]}`), nil

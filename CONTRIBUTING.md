@@ -78,9 +78,11 @@ Please run the same checks used by CI:
 make check
 ```
 
-This includes Go formatting/module checks, WASM compilation, vet, Go tests and
-the Node.js browser tests. For a browser-only change, `make test-js` provides a
-fast check; still run `make check` before opening a pull request.
+This includes Go formatting/module checks, WASM compilation, vet, Go tests,
+the Node.js browser tests and Go WASM lifecycle tests running in Node.js.
+`make test-js` and `make test-wasm` provide focused runs; still run `make check`
+before opening a pull request. Module-resolution regressions use offline proxy
+fixtures to compare the browser resolver's selected versions with the Go toolchain.
 
 ## Project Notes
 

@@ -22,6 +22,7 @@ var remoteModuleEnv = []string{
 	"GOPROXY=https://proxy.golang.org",
 	"GONOPROXY=",
 	"GOPRIVATE=",
+	"GOFLAGS=",
 }
 
 type Analyzer struct {
@@ -243,22 +244,40 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 		return nil, fmt.Errorf("resolved root module %q has no module directory", rootID)
 	}
 
-	rootModules, rootMainID, err := a.readModuleList(ctx, rootInfo.Dir, env)
+	// Never activate a downloaded module's directives in the module cache.
+	// Parse a writable copy before loading its graph, and reject filesystem
+	// replacements before Go has a chance to follow them on the server.
+	analysisDir := filepath.Join(tempDir, "analysis")
+	if err := prepareRemoteAnalysis(analysisDir, rootInfo.Dir, tempDir); err != nil {
+		return nil, err
+	}
+	rootDirect, replacements, err := a.readGoModMetadata(ctx, analysisDir, env, false)
+	if err != nil {
+		return nil, fmt.Errorf("read root module requirements: %w", err)
+	}
+	for _, rule := range replacements {
+		if rule.Replacement.Version == "" {
+			return nil, invalidRequestf("remote modules with filesystem replacements are not supported")
+		}
+	}
+	// Published go.sum files may be incomplete. Let Go populate checksums only
+	// in this disposable copy; retain the module cache's original files.
+	analysisEnv := append(append([]string(nil), env...), "GOFLAGS=-mod=mod")
+	rootModules, rootMainID, err := a.readModuleList(ctx, analysisDir, analysisEnv)
 	if err != nil {
 		return nil, fmt.Errorf("load root module list: %w", err)
 	}
 
-	rootEdges, err := a.readEdges(ctx, rootInfo.Dir, env)
+	rootEdges, err := a.readEdges(ctx, analysisDir, analysisEnv)
 	if err != nil {
 		return nil, fmt.Errorf("load root module graph: %w", err)
 	}
 
-	rootDirect, replacements, err := a.readGoModMetadata(ctx, rootInfo.Dir, env, false)
-	if err != nil {
-		return nil, fmt.Errorf("read root module requirements: %w", err)
-	}
-
 	rootModules, rootEdges = rewriteMainModuleID(rootModules, rootEdges, rootMainID, rootID)
+	// License detection still uses the immutable downloaded source directory.
+	rootModule := rootModules[rootID]
+	rootModule.Dir = rootInfo.Dir
+	rootModules[rootID] = rootModule
 
 	return buildGraph(buildInput{
 		rootID:       rootID,
@@ -270,6 +289,34 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 		replacements: replacements,
 		filterToRoot: true,
 	})
+}
+
+func prepareRemoteAnalysis(dir, sourceDir, seedDir string) error {
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		return fmt.Errorf("create module analysis directory: %w", err)
+	}
+	mod, err := os.ReadFile(filepath.Join(sourceDir, "go.mod"))
+	if err != nil {
+		return fmt.Errorf("read downloaded go.mod: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), mod, 0o600); err != nil {
+		return fmt.Errorf("write analysis go.mod: %w", err)
+	}
+	var sums []byte
+	for _, from := range []string{sourceDir, seedDir} {
+		raw, err := os.ReadFile(filepath.Join(from, "go.sum"))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("read module checksums: %w", err)
+		}
+		sums = append(append(sums, raw...), '\n')
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.sum"), sums, 0o600); err != nil {
+		return fmt.Errorf("write analysis go.sum: %w", err)
+	}
+	return nil
 }
 
 func goGetRequestTarget(target string) string {
