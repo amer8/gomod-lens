@@ -29,6 +29,7 @@ const (
 	defaultDepsDevUserAgent = "gomod-lens (+https://github.com/amer8/gomod-lens)"
 	upstreamUserAgentEnvVar = "GOMOD_LENS_USER_AGENT"
 	maxDepsDevResponseBytes = 1 << 20
+	mutableLensCacheTTL     = 5 * time.Minute
 )
 
 var errDepsDevNotFound = errors.New("not found")
@@ -71,7 +72,13 @@ type DepsDevOpenSSFScoreProvider struct {
 	client      *http.Client
 	concurrency int
 	cacheMu     sync.RWMutex
-	cache       map[string]OpenSSFScore
+	cache       map[string]cachedOpenSSFScore
+	now         func() time.Time
+}
+
+type cachedOpenSSFScore struct {
+	score     OpenSSFScore
+	expiresAt time.Time
 }
 
 // NewDepsDevOpenSSFScoreProvider creates a deps.dev-backed Scorecard provider.
@@ -85,7 +92,8 @@ func NewDepsDevOpenSSFScoreProvider(client *http.Client, concurrency int) *DepsD
 	return &DepsDevOpenSSFScoreProvider{
 		client:      client,
 		concurrency: concurrency,
-		cache:       make(map[string]OpenSSFScore),
+		cache:       make(map[string]cachedOpenSSFScore),
+		now:         time.Now,
 	}
 }
 
@@ -140,14 +148,17 @@ func (p *DepsDevOpenSSFScoreProvider) FetchOpenSSFScores(ctx context.Context, de
 func (p *DepsDevOpenSSFScoreProvider) cached(key string) (OpenSSFScore, bool) {
 	p.cacheMu.RLock()
 	defer p.cacheMu.RUnlock()
-	score, ok := p.cache[key]
-	return score, ok
+	entry, ok := p.cache[key]
+	if !ok || !p.now().Before(entry.expiresAt) {
+		return OpenSSFScore{}, false
+	}
+	return entry.score, true
 }
 
 func (p *DepsDevOpenSSFScoreProvider) setCached(key string, score OpenSSFScore) {
 	p.cacheMu.Lock()
 	defer p.cacheMu.Unlock()
-	p.cache[key] = score
+	p.cache[key] = cachedOpenSSFScore{score: score, expiresAt: p.now().Add(mutableLensCacheTTL)}
 }
 
 func (p *DepsDevOpenSSFScoreProvider) fetchScore(ctx context.Context, dep OpenSSFScoreRequest) OpenSSFScore {

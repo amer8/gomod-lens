@@ -104,8 +104,10 @@ func openCacheDB(ctx context.Context) (js.Value, error) {
 	})
 	request.Set("onupgradeneeded", onUpgrade)
 
-	db, err := awaitIDBRequest(ctx, request)
-	onUpgrade.Release()
+	db, err := awaitIDBRequest(ctx, request, func() {
+		request.Set("onupgradeneeded", js.Null())
+		onUpgrade.Release()
+	})
 	if err != nil {
 		return js.Undefined(), err
 	}
@@ -116,7 +118,7 @@ func openCacheDB(ctx context.Context) (js.Value, error) {
 	return db, nil
 }
 
-func awaitIDBRequest(ctx context.Context, request js.Value) (js.Value, error) {
+func awaitIDBRequest(ctx context.Context, request js.Value, onSettled ...func()) (js.Value, error) {
 	executor := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		resolve := args[0]
 		reject := args[1]
@@ -124,8 +126,15 @@ func awaitIDBRequest(ctx context.Context, request js.Value) (js.Value, error) {
 		var failure js.Func
 
 		release := func() {
+			request.Set("onsuccess", js.Null())
+			request.Set("onerror", js.Null())
 			success.Release()
 			failure.Release()
+			// A canceled waiter can return before the IDB request completes.
+			// Keep all event handlers alive until its eventual success or error.
+			for _, cleanup := range onSettled {
+				cleanup()
+			}
 		}
 		success = js.FuncOf(func(_ js.Value, _ []js.Value) any {
 			resolve.Invoke(request.Get("result"))

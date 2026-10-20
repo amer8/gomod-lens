@@ -4,6 +4,7 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ var remoteModuleEnv = []string{
 	"GOPROXY=https://proxy.golang.org",
 	"GONOPROXY=",
 	"GOPRIVATE=",
+	"GOFLAGS=",
 }
 
 type Analyzer struct {
@@ -200,65 +202,82 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 	}
 
 	env := append([]string(nil), remoteModuleEnv...)
-	resolvedTarget := target
-	requested := goGetRequestTarget(resolvedTarget)
-
-	if _, err := a.runner.Run(ctx, tempDir, env, "go", "get", requested); err != nil {
-		declaredPath := declaredModulePathFromError(err)
-		if declaredPath == "" {
-			return nil, fmt.Errorf("resolve module %q: %w", target, err)
-		}
-
-		_, version := splitModuleToken(target)
-		resolvedTarget = moduleID(declaredPath, version)
-		requested = goGetRequestTarget(resolvedTarget)
-		if err := os.WriteFile(filepath.Join(tempDir, "go.mod"), []byte(remoteModuleSeedGoMod), 0o644); err != nil {
-			return nil, fmt.Errorf("reset temp go.mod: %w", err)
-		}
-		if _, retryErr := a.runner.Run(ctx, tempDir, env, "go", "get", requested); retryErr != nil {
-			return nil, fmt.Errorf("resolve module %q via declared path %q: %w", target, resolvedTarget, retryErr)
-		}
+	raw, err := a.runner.Run(ctx, tempDir, env, "go", "mod", "download", "-json", moduleDownloadTarget(target))
+	if err != nil {
+		return nil, fmt.Errorf("download module %q: %w", target, err)
+	}
+	var rootInfo downloadedModule
+	if err := json.Unmarshal(raw, &rootInfo); err != nil {
+		return nil, fmt.Errorf("decode downloaded module: %w", err)
+	}
+	if rootInfo.Path == "" || rootInfo.Version == "" || rootInfo.Dir == "" || rootInfo.GoMod == "" {
+		return nil, fmt.Errorf("downloaded module %q has incomplete metadata", target)
 	}
 
-	modules, _, err := a.readModuleList(ctx, tempDir, env)
-	if err != nil {
+	// Never activate a downloaded module's directives in the module cache.
+	// Parse a writable copy before loading its graph, and reject filesystem
+	// replacements before Go has a chance to follow them on the server.
+	analysisDir := filepath.Join(tempDir, "analysis")
+	if err := prepareRemoteAnalysis(analysisDir, rootInfo.Dir, rootInfo.GoMod); err != nil {
 		return nil, err
 	}
-
-	tempRequires, _, err := a.readGoModMetadata(ctx, tempDir, env, true)
+	rootDirect, replacements, err := a.readGoModMetadata(ctx, analysisDir, env, false)
 	if err != nil {
+		return nil, fmt.Errorf("read root module requirements: %w", err)
+	}
+	for _, rule := range replacements {
+		if rule.Replacement.Version == "" {
+			return nil, invalidRequestf("remote modules with filesystem replacements are not supported")
+		}
+	}
+	// Published go.sum files may be incomplete. Let Go populate checksums only
+	// in this disposable copy; retain the module cache's original files.
+	analysisEnv := append(append([]string(nil), env...), "GOFLAGS=-mod=mod")
+	// Dependency sources are optional license evidence. Keep successful downloads
+	// (including public replacements) even if another archive is unavailable;
+	// the metadata commands below still enforce a resolvable module graph.
+	_, _ = a.runner.Run(ctx, analysisDir, analysisEnv, "go", "mod", "download", "all")
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-
-	rootID, err := pickRootModuleID(resolvedTarget, tempRequires)
-	if err != nil {
-		return nil, err
-	}
-
-	rootInfo, ok := modules[rootID]
-	if !ok {
-		return nil, fmt.Errorf("resolved root module %q missing from module list", rootID)
-	}
-	if strings.TrimSpace(rootInfo.Dir) == "" {
-		return nil, fmt.Errorf("resolved root module %q has no module directory", rootID)
-	}
-
-	rootModules, rootMainID, err := a.readModuleList(ctx, rootInfo.Dir, env)
+	rootModules, rootMainID, err := a.readModuleList(ctx, analysisDir, analysisEnv)
 	if err != nil {
 		return nil, fmt.Errorf("load root module list: %w", err)
 	}
 
-	rootEdges, err := a.readEdges(ctx, rootInfo.Dir, env)
+	rootEdges, err := a.readEdges(ctx, analysisDir, analysisEnv)
 	if err != nil {
 		return nil, fmt.Errorf("load root module graph: %w", err)
 	}
 
-	rootDirect, replacements, err := a.readGoModMetadata(ctx, rootInfo.Dir, env, false)
-	if err != nil {
-		return nil, fmt.Errorf("read root module requirements: %w", err)
+	if rootMainID == "" {
+		return nil, fmt.Errorf("downloaded module %q has no main module", target)
 	}
-
+	rootID := moduleID(rootMainID, rootInfo.Version)
+	resolvedTarget := target
+	requestedPath, requestedVersion := splitModuleToken(target)
+	if rootMainID != requestedPath {
+		resolvedTarget = moduleID(rootMainID, requestedVersion)
+	}
 	rootModules, rootEdges = rewriteMainModuleID(rootModules, rootEdges, rootMainID, rootID)
+	// License detection still uses the immutable downloaded source directory.
+	rootModule := rootModules[rootID]
+	rootModule.Dir = rootInfo.Dir
+	rootModules[rootID] = rootModule
+
+	// Directness belongs to the original requirement's module path, even when
+	// Go selects a newer version while loading the writable analysis copy.
+	directPaths := make(map[string]bool, len(rootDirect))
+	for id := range rootDirect {
+		path, _ := splitModuleToken(id)
+		directPaths[path] = true
+	}
+	selectedDirect := make(map[string]bool, len(rootDirect))
+	for id, module := range rootModules {
+		if directPaths[module.Path] {
+			selectedDirect[id] = true
+		}
+	}
 
 	return buildGraph(buildInput{
 		rootID:       rootID,
@@ -266,73 +285,46 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 		target:       resolvedTarget,
 		modules:      rootModules,
 		edges:        rootEdges,
-		direct:       rootDirect,
+		direct:       selectedDirect,
 		replacements: replacements,
 		filterToRoot: true,
 	})
 }
 
-func goGetRequestTarget(target string) string {
+type downloadedModule struct {
+	Path    string
+	Version string
+	Dir     string
+	GoMod   string
+}
+
+func prepareRemoteAnalysis(dir, sourceDir, goModPath string) error {
+	if err := os.Mkdir(dir, 0o700); err != nil {
+		return fmt.Errorf("create module analysis directory: %w", err)
+	}
+	mod, err := os.ReadFile(goModPath)
+	if err != nil {
+		return fmt.Errorf("read downloaded go.mod: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), mod, 0o600); err != nil {
+		return fmt.Errorf("write analysis go.mod: %w", err)
+	}
+	sums, err := os.ReadFile(filepath.Join(sourceDir, "go.sum"))
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("read module checksums: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.sum"), sums, 0o600); err != nil {
+		return fmt.Errorf("write analysis go.sum: %w", err)
+	}
+	return nil
+}
+
+func moduleDownloadTarget(target string) string {
 	requested := target
 	if _, version := splitModuleToken(requested); version == "" {
 		requested += "@latest"
 	}
 	return requested
-}
-
-func declaredModulePathFromError(err error) string {
-	if err == nil {
-		return ""
-	}
-
-	const marker = "module declares its path as:"
-	text := err.Error()
-	index := strings.Index(text, marker)
-	if index < 0 {
-		return ""
-	}
-
-	rest := strings.TrimSpace(text[index+len(marker):])
-	fields := strings.Fields(rest)
-	if len(fields) == 0 {
-		return ""
-	}
-
-	path := strings.TrimSpace(fields[0])
-	if !isPlausibleDeclaredModulePath(path) {
-		return ""
-	}
-	return path
-}
-
-func isPlausibleDeclaredModulePath(path string) bool {
-	if path == "" ||
-		strings.Contains(path, "@") ||
-		strings.Contains(path, "://") ||
-		strings.ContainsAny(path, "?#") ||
-		strings.HasPrefix(path, ".") ||
-		strings.HasPrefix(path, "/") ||
-		isPseudoModulePath(path) {
-		return false
-	}
-
-	for _, r := range path {
-		switch {
-		case r >= 'a' && r <= 'z':
-			continue
-		case r >= 'A' && r <= 'Z':
-			continue
-		case r >= '0' && r <= '9':
-			continue
-		}
-		switch r {
-		case '/', '.', '-', '_', '~':
-			continue
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func normalizeLocalDir(target string) (string, error) {
@@ -393,33 +385,6 @@ func (a *Analyzer) readGoModMetadata(ctx context.Context, dir string, env []stri
 	}
 
 	return requires, replacements, nil
-}
-
-func pickRootModuleID(target string, requires map[string]bool) (string, error) {
-	targetPath, _ := splitModuleToken(target)
-	if exact := canonicalModuleToken(target); requires[exact] {
-		return exact, nil
-	}
-
-	var candidates []string
-	for id := range requires {
-		path, _ := splitModuleToken(id)
-		if path == targetPath {
-			candidates = append(candidates, id)
-		}
-	}
-
-	sort.Strings(candidates)
-	if len(candidates) == 1 {
-		return candidates[0], nil
-	}
-	if len(candidates) == 0 && len(requires) == 1 {
-		for id := range requires {
-			return id, nil
-		}
-	}
-
-	return "", fmt.Errorf("unable to determine resolved root module for %q", target)
 }
 
 type buildInput struct {

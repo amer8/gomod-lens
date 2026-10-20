@@ -1,6 +1,6 @@
 # Privacy and External Services
 
-Last updated: October 15, 2026
+Last updated: October 20, 2026
 
 go.mod Lens is intended for exploring public Go modules. Do not enter private
 module paths, secret repository names, access tokens, or other non-public
@@ -15,7 +15,14 @@ its own server logs, analytics, CDN, proxy, or platform-level data collection.
 
 Remote module analysis shells out to the Go toolchain. For public module
 requests, the server pins module resolution to `GOPROXY=https://proxy.golang.org`
-and disables direct VCS fallback. The Go module mirror, and the Go checksum
+and disables direct VCS fallback. The root module is downloaded without resolving
+its dependencies first. Remote root modules are analyzed from a
+disposable, writable copy of their module metadata. Filesystem replacements
+are rejected before their dependency graph is loaded. Selected dependency
+archives are then downloaded on a best-effort basis with the root's public
+replacements applied for license detection. An unavailable source archive leaves
+its license unknown; unavailable graph metadata still fails analysis. Downloaded
+module cache files are not modified. The Go module mirror, and the Go checksum
 database used by the Go toolchain, may receive requested public module paths and
 versions as part of normal module resolution. The Release Freshness lens also
 uses Go module mirror version-list and latest-version endpoints for modules in
@@ -80,7 +87,11 @@ browser site-data controls.
 
 ## Caching and Rate Limits
 
-The Go server keeps in-memory caches to reduce upstream traffic. By default,
+The Go server keeps in-memory caches to reduce upstream traffic. Latest-release
+and Scorecard provider observations expire after five minutes, including
+unavailable Scorecard results. Failed lookups are not cached. These provider
+caches are separate from the graph response cache: their expiry does not
+invalidate a graph response that is still cached. By default,
 graph responses are cached for 24 hours and module search results for 1 hour.
 These defaults can be changed with the environment variables documented in
 `README.md`. The static build's IndexedDB cache uses shorter TTLs for mutable

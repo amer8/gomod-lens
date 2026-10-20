@@ -10,7 +10,7 @@ GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE)
 GO_PACKAGES := ./...
 GO_SOURCE_DIRS := main.go internal cmd
 
-.PHONY: help cache-dirs run test test-js vet vet-wasm fmt fmt-check tidy-check wasm serve check clean
+.PHONY: help cache-dirs run test test-js test-wasm vet vet-wasm fmt fmt-check tidy-check wasm serve check clean
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -26,6 +26,9 @@ test: cache-dirs ## Run all Go tests with repo-local caches.
 
 test-js: ## Run browser logic, registry and Web/WASM asset parity tests (Node.js 22+).
 	$(NODE) --test tests/*.test.mjs
+
+test-wasm: cache-dirs ## Run Go WASM lifecycle tests in Node.js.
+	GOOS=js GOARCH=wasm $(GO_ENV) $(GO) test -exec="$$($(GO) env GOROOT)/lib/wasm/go_js_wasm_exec" ./cmd/wasm
 
 vet: cache-dirs ## Run go vet.
 	$(GO_ENV) $(GO) vet $(GO_PACKAGES)
@@ -49,7 +52,7 @@ wasm: cache-dirs ## Build the static WebAssembly artifact into dist/assets.
 serve: cache-dirs ## Serve the static dist prototype on port 4173.
 	$(GO_ENV) $(GO) run ./cmd/serve-dist
 
-check: fmt-check tidy-check wasm vet vet-wasm test test-js ## Run the same checks used by CI.
+check: fmt-check tidy-check wasm vet vet-wasm test test-js test-wasm ## Run the same checks used by CI.
 
 clean: ## Remove generated local caches and static artifacts.
 	rm -rf "$(CURDIR)/.gocache" "$(CURDIR)/.gomodcache" dist/assets/gomod-lens.wasm dist/assets/wasm_exec.js dist/assets/vendor

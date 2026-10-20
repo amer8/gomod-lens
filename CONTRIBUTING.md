@@ -78,13 +78,16 @@ Please run the same checks used by CI:
 make check
 ```
 
-This includes Go formatting/module checks, WASM compilation, vet, Go tests and
-the Node.js browser tests. For a browser-only change, `make test-js` provides a
-fast check; still run `make check` before opening a pull request.
+This includes Go formatting/module checks, WASM compilation, vet, Go tests,
+the Node.js browser tests and Go WASM lifecycle tests running in Node.js.
+`make test-js` and `make test-wasm` provide focused runs; still run `make check`
+before opening a pull request. Module-resolution regressions use offline proxy
+fixtures to compare the browser resolver's selected versions with the Go toolchain.
 
 ## Project Notes
 
 - Keep changes focused and consistent with the existing small-Go-app structure.
+- Server and WASM version parsing and precedence share `internal/semver`; keep numeric comparisons independent of machine integer limits.
 - Do not commit generated static assets such as `dist/assets/gomod-lens.wasm`, `dist/assets/wasm_exec.js`, or `dist/assets/vendor/`; CI and the Pages workflow build them.
 - The browser UI intentionally avoids an npm build step. Server assets live under `internal/app/web/static`; the GitHub Pages prototype uses `dist/` plus the Go WASM build.
 - Remote module analysis shells out to the Go toolchain, so include clear reproduction targets for bugs involving module resolution.

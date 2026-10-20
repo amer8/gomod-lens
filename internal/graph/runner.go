@@ -25,14 +25,14 @@ func (CommandRunner) Run(ctx context.Context, dir string, env []string, name str
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 
-	var output bytes.Buffer
+	var output, diagnostics bytes.Buffer
 	cmd.Stdout = &output
-	cmd.Stderr = &output
+	cmd.Stderr = &diagnostics
 
 	if err := cmd.Run(); err != nil {
 		return nil, &CommandError{
 			Command: strings.Join(append([]string{name}, args...), " "),
-			Output:  strings.TrimSpace(output.String()),
+			Output:  strings.TrimSpace(output.String() + "\n" + diagnostics.String()),
 			Err:     err,
 		}
 	}
