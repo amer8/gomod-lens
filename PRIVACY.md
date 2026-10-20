@@ -19,9 +19,10 @@ and disables direct VCS fallback. The root module is downloaded without resolvin
 its dependencies first. Remote root modules are analyzed from a
 disposable, writable copy of their module metadata. Filesystem replacements
 are rejected before their dependency graph is loaded. Selected dependency
-archives are then downloaded with the root's public replacements applied so
-source directories remain available for license detection. Downloaded module
-cache files are not modified. The Go module mirror, and the Go checksum
+archives are then downloaded on a best-effort basis with the root's public
+replacements applied for license detection. An unavailable source archive leaves
+its license unknown; unavailable graph metadata still fails analysis. Downloaded
+module cache files are not modified. The Go module mirror, and the Go checksum
 database used by the Go toolchain, may receive requested public module paths and
 versions as part of normal module resolution. The Release Freshness lens also
 uses Go module mirror version-list and latest-version endpoints for modules in

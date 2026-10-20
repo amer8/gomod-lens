@@ -233,10 +233,12 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 	// Published go.sum files may be incomplete. Let Go populate checksums only
 	// in this disposable copy; retain the module cache's original files.
 	analysisEnv := append(append([]string(nil), env...), "GOFLAGS=-mod=mod")
-	// Fetch selected dependency sources after validation so module directories
-	// remain available for license detection, including public replacements.
-	if _, err := a.runner.Run(ctx, analysisDir, analysisEnv, "go", "mod", "download", "all"); err != nil {
-		return nil, fmt.Errorf("download root dependencies: %w", err)
+	// Dependency sources are optional license evidence. Keep successful downloads
+	// (including public replacements) even if another archive is unavailable;
+	// the metadata commands below still enforce a resolvable module graph.
+	_, _ = a.runner.Run(ctx, analysisDir, analysisEnv, "go", "mod", "download", "all")
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	rootModules, rootMainID, err := a.readModuleList(ctx, analysisDir, analysisEnv)
 	if err != nil {

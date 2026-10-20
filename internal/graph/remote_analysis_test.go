@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,6 +131,103 @@ func TestRemoteAnalysisAppliesRootReplacementsBeforeLoadingDependencies(t *testi
 				t.Fatalf("replacement source archive was not downloaded: %v", err)
 			}
 		})
+	}
+}
+
+func TestRemoteAnalysisToleratesUnavailableSourceArchivesButRequiresMetadata(t *testing.T) {
+	for _, goVersion := range []string{"1.16", "1.26"} {
+		for _, replaced := range []bool{false, true} {
+			for _, missing := range []string{"zip", "mod"} {
+				t.Run(fmt.Sprintf("go%s/replaced=%t/missing=%s", goVersion, replaced, missing), func(t *testing.T) {
+					rootMod := "module example.org/root\n\ngo " + goVersion + "\nrequire (\nexample.org/missing v1.0.0\nexample.org/available v1.0.0\n)\n"
+					missingPath := "example.org/missing"
+					if replaced {
+						missingPath = "example.org/fork"
+						rootMod += "replace example.org/missing => " + missingPath + " v1.0.0\n"
+					}
+					fixtureEnv := modproxytest.Env(t, map[string]string{
+						"example.org/root@v1.0.0":      rootMod,
+						missingPath + "@v1.0.0":        "module " + missingPath + "\n\ngo " + goVersion + "\n",
+						"example.org/available@v1.0.0": "module example.org/available\n\ngo " + goVersion + "\n",
+					})
+					for _, value := range fixtureEnv {
+						if proxy, ok := strings.CutPrefix(value, "GOPROXY="); ok {
+							parsed, err := url.Parse(proxy)
+							if err != nil {
+								t.Fatal(err)
+							}
+							if err := os.Remove(filepath.Join(parsed.Path, missingPath, "@v", "v1.0.0."+missing)); err != nil {
+								t.Fatal(err)
+							}
+						}
+					}
+					var selected map[string]moduleInfo
+					downloadFailed := false
+					runner := fakeRunner(func(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
+						env = append(append([]string(nil), env...), fixtureEnv...)
+						out, err := (CommandRunner{}).Run(ctx, dir, env, name, args...)
+						if commandKey(name, args...) == "go mod download all" {
+							downloadFailed = err != nil
+						}
+						if err == nil && commandKey(name, args...) == "go list -m -json all" {
+							selected, _, err = parseModuleList(out)
+						}
+						return out, err
+					})
+					analyzer := NewAnalyzer(runner)
+					analyzer.SetLenses()
+					result, err := analyzer.Analyze(context.Background(), Request{Target: "example.org/root@v1.0.0", Mode: ModeModule})
+					if !downloadFailed {
+						t.Fatal("fixture did not trigger a dependency download failure")
+					}
+					if missing == "mod" {
+						if err == nil {
+							t.Fatal("unavailable graph metadata should remain fatal")
+						}
+						return
+					}
+					if err != nil {
+						t.Fatalf("optional source failure discarded the graph: %v", err)
+					}
+					nodes := indexNodes(result.Nodes)
+					if len(nodes) != 3 || len(result.Edges) != 2 || !nodes["example.org/missing@v1.0.0"].Direct || nodes["example.org/missing@v1.0.0"].Replaced != replaced {
+						t.Fatalf("incorrect graph after partial download: %+v", result)
+					}
+					available := selected["example.org/available@v1.0.0"]
+					if available.Dir == "" {
+						t.Fatal("partial failure discarded available dependency sources")
+					}
+					if _, err := os.Stat(filepath.Join(available.Dir, "fixture.go")); err != nil {
+						t.Fatalf("available dependency source missing: %v", err)
+					}
+					if license := detectModuleLicense(selected["example.org/missing@v1.0.0"].Dir, make(map[string]string)); license != "unknown" {
+						t.Fatalf("missing source license = %q, want unknown", license)
+					}
+				})
+			}
+		}
+	}
+}
+
+func TestRemoteAnalysisStopsAfterCanceledSourceDownload(t *testing.T) {
+	base := offlineRunner(t, map[string]string{
+		"example.org/root@v1.0.0": "module example.org/root\n\ngo 1.26\n",
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	analyzer := NewAnalyzer(fakeRunner(func(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
+		if commandKey(name, args...) == "go mod download all" {
+			cancel()
+			return nil, ctx.Err()
+		}
+		if ctx.Err() != nil {
+			t.Fatal("analysis continued after cancellation")
+		}
+		return base.Run(ctx, dir, env, name, args...)
+	}))
+	analyzer.SetLenses()
+	if _, err := analyzer.Analyze(ctx, Request{Target: "example.org/root@v1.0.0", Mode: ModeModule}); err != context.Canceled {
+		t.Fatalf("canceled analysis = %v, want context.Canceled", err)
 	}
 }
 
