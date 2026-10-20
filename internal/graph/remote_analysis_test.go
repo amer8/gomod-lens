@@ -91,3 +91,39 @@ func TestRemoteAnalysisPopulatesMissingChecksumsWithoutChangingDownload(t *testi
 		t.Fatalf("downloaded go.sum was modified: %v", err)
 	}
 }
+
+func TestRemoteAnalysisPreservesDirectRequirementsAfterVersionUpgrades(t *testing.T) {
+	for _, goVersion := range []string{"1.16", "1.26"} {
+		t.Run(goVersion, func(t *testing.T) {
+			modules := map[string]string{
+				"example.org/root@v1.0.0": "module example.org/root\n\ngo " + goVersion + "\nrequire (\nexample.org/a v1.0.0\nexample.org/b v1.0.0\nexample.org/c v1.0.0 // indirect\n)\n",
+				"example.org/a@v1.0.0":    "module example.org/a\n\ngo " + goVersion + "\nrequire (\nexample.org/b v1.1.0\nexample.org/c v1.1.0\n)\n",
+				"example.org/b@v1.0.0":    "module example.org/b\n\ngo " + goVersion + "\n",
+				"example.org/b@v1.1.0":    "module example.org/b\n\ngo " + goVersion + "\n",
+				"example.org/c@v1.0.0":    "module example.org/c\n\ngo " + goVersion + "\n",
+				"example.org/c@v1.1.0":    "module example.org/c\n\ngo " + goVersion + "\n",
+			}
+			analyzer := NewAnalyzer(offlineRunner(t, modules))
+			analyzer.SetLenses()
+			result, err := analyzer.Analyze(context.Background(), Request{Target: "example.org/root@v1.0.0", Mode: ModeModule})
+			if err != nil {
+				t.Fatal(err)
+			}
+			nodes := indexNodes(result.Nodes)
+			for id, wantDirect := range map[string]bool{
+				"example.org/root@v1.0.0": false,
+				"example.org/a@v1.0.0":    true,
+				"example.org/b@v1.1.0":    true,
+				"example.org/c@v1.1.0":    false,
+			} {
+				node, ok := nodes[id]
+				if !ok || node.Direct != wantDirect {
+					t.Errorf("node %s = %+v (present=%t), want Direct=%t", id, node, ok, wantDirect)
+				}
+			}
+			if len(nodes) != 4 {
+				t.Fatalf("expected four selected modules, got %+v", result.Nodes)
+			}
+		})
+	}
+}

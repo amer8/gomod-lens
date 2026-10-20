@@ -279,13 +279,27 @@ func (a *Analyzer) analyzeModule(ctx context.Context, target string) (*Graph, er
 	rootModule.Dir = rootInfo.Dir
 	rootModules[rootID] = rootModule
 
+	// Directness belongs to the original requirement's module path, even when
+	// Go selects a newer version while loading the writable analysis copy.
+	directPaths := make(map[string]bool, len(rootDirect))
+	for id := range rootDirect {
+		path, _ := splitModuleToken(id)
+		directPaths[path] = true
+	}
+	selectedDirect := make(map[string]bool, len(rootDirect))
+	for id, module := range rootModules {
+		if directPaths[module.Path] {
+			selectedDirect[id] = true
+		}
+	}
+
 	return buildGraph(buildInput{
 		rootID:       rootID,
 		mode:         ModeModule,
 		target:       resolvedTarget,
 		modules:      rootModules,
 		edges:        rootEdges,
-		direct:       rootDirect,
+		direct:       selectedDirect,
 		replacements: replacements,
 		filterToRoot: true,
 	})
