@@ -87,6 +87,7 @@ fixtures to compare the browser resolver's selected versions with the Go toolcha
 ## Project Notes
 
 - Keep changes focused and consistent with the existing small-Go-app structure.
+- Server and WASM version parsing and precedence share `internal/semver`; keep numeric comparisons independent of machine integer limits.
 - Do not commit generated static assets such as `dist/assets/gomod-lens.wasm`, `dist/assets/wasm_exec.js`, or `dist/assets/vendor/`; CI and the Pages workflow build them.
 - The browser UI intentionally avoids an npm build step. Server assets live under `internal/app/web/static`; the GitHub Pages prototype uses `dist/` plus the Go WASM build.
 - Remote module analysis shells out to the Go toolchain, so include clear reproduction targets for bugs involving module resolution.

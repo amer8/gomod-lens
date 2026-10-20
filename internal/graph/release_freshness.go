@@ -3,7 +3,6 @@ package graph
 import (
 	"context"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/amer8/gomod-lens/internal/semver"
@@ -209,9 +208,9 @@ func ClassifyReleaseFreshness(module, version, latestVersion string) ReleaseFres
 		return info
 	}
 	switch {
-	case current.Major < latest.Major:
+	case semver.CompareNumeric(current.Major, latest.Major) < 0:
 		info.Status = ReleaseFreshnessStatusMajorBehind
-	case current.Minor < latest.Minor:
+	case semver.CompareNumeric(current.Minor, latest.Minor) < 0:
 		info.Status = ReleaseFreshnessStatusMinorBehind
 	default:
 		info.Status = ReleaseFreshnessStatusPatchBehind
@@ -336,105 +335,12 @@ func releaseFreshnessScore(status string) *float64 {
 	return &value
 }
 
-type moduleVersion struct {
-	Major      int
-	Minor      int
-	Patch      int
-	Prerelease string
-}
-
-func parseModuleVersion(version string) *moduleVersion {
-	version = strings.TrimSpace(version)
-	if !strings.HasPrefix(version, "v") {
-		return nil
-	}
-
-	body := version[1:]
-	if plus := strings.Index(body, "+"); plus >= 0 {
-		body = body[:plus]
-	}
-
-	prerelease := ""
-	if dash := strings.Index(body, "-"); dash >= 0 {
-		prerelease = body[dash+1:]
-		body = body[:dash]
-	}
-
-	parts := strings.Split(body, ".")
-	if len(parts) != 3 {
-		return nil
-	}
-	major, ok := parseModuleVersionNumber(parts[0])
-	if !ok {
-		return nil
-	}
-	minor, ok := parseModuleVersionNumber(parts[1])
-	if !ok {
-		return nil
-	}
-	patch, ok := parseModuleVersionNumber(parts[2])
-	if !ok {
-		return nil
-	}
-
-	return &moduleVersion{
-		Major:      major,
-		Minor:      minor,
-		Patch:      patch,
-		Prerelease: prerelease,
-	}
-}
-
-func parseModuleVersionNumber(value string) (int, bool) {
-	if value == "" {
-		return 0, false
-	}
-	for _, char := range value {
-		if char < '0' || char > '9' {
-			return 0, false
-		}
-	}
-	parsed, err := strconv.Atoi(value)
-	return parsed, err == nil
+func parseModuleVersion(version string) *semver.Version {
+	return semver.Parse(version)
 }
 
 func compareModuleVersions(left, right string) int {
-	a := parseModuleVersion(left)
-	b := parseModuleVersion(right)
-	if a == nil && b == nil {
-		return strings.Compare(left, right)
-	}
-	if a == nil {
-		return -1
-	}
-	if b == nil {
-		return 1
-	}
-
-	if a.Major != b.Major {
-		return a.Major - b.Major
-	}
-	if a.Minor != b.Minor {
-		return a.Minor - b.Minor
-	}
-	if a.Patch != b.Patch {
-		return a.Patch - b.Patch
-	}
-
-	if a.Prerelease == "" && b.Prerelease != "" {
-		return 1
-	}
-	if a.Prerelease != "" && b.Prerelease == "" {
-		return -1
-	}
-	if a.Prerelease == "" && b.Prerelease == "" {
-		return 0
-	}
-	return compareModulePrerelease(a.Prerelease, b.Prerelease)
-}
-
-func compareModulePrerelease(left, right string) int {
-	return semver.ComparePrerelease(left, right)
+	return semver.Compare(left, right)
 }
 
 func isPseudoModuleVersion(version string) bool {
@@ -448,7 +354,7 @@ func isPseudoModuleVersion(version string) bool {
 		if len(part) != 14 {
 			continue
 		}
-		if _, ok := parseModuleVersionNumber(part); ok {
+		if strings.Trim(part, "0123456789") == "" {
 			return true
 		}
 	}

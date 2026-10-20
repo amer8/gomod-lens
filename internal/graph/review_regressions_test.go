@@ -17,6 +17,30 @@ func TestPrereleaseIdentifiersPreserveHyphens(t *testing.T) {
 	}
 }
 
+func TestLargeCoreVersionsRemainComparableForFreshness(t *testing.T) {
+	for _, tc := range []struct {
+		current string
+		latest  string
+		status  string
+	}{
+		{"v1.0.9", "v1.0.9223372036854775808", ReleaseFreshnessStatusPatchBehind},
+		{"v1.9.0", "v1.9223372036854775808.0", ReleaseFreshnessStatusMinorBehind},
+		{"v9.0.0", "v9223372036854775808.0.0", ReleaseFreshnessStatusMajorBehind},
+		{"v1.0.9223372036854775808", "v1.0.10000000000000000000", ReleaseFreshnessStatusPatchBehind},
+		{"v1.0.10000000000000000000", "v1.0.9223372036854775808", ReleaseFreshnessStatusCurrent},
+		{"v1.0.9223372036854775808-rc-1", "v1.0.9223372036854775808", ReleaseFreshnessStatusPrerelease},
+	} {
+		t.Run(tc.current+"/"+tc.latest, func(t *testing.T) {
+			if got := ClassifyReleaseFreshness("example.org/a", tc.current, tc.latest); got.Status != tc.status {
+				t.Fatalf("freshness=%+v, want status %s", got, tc.status)
+			}
+		})
+	}
+	if got := LatestStableModuleVersion("v1.0.9\nv1.0.9223372036854775808\n"); got != "v1.0.9223372036854775808" {
+		t.Fatalf("large stable release was ignored: %s", got)
+	}
+}
+
 func TestUnknownLicenseCandidateDoesNotMaskRecognizedLicense(t *testing.T) {
 	for _, candidate := range []string{"COPYING", "LICENSE.custom"} {
 		t.Run(candidate, func(t *testing.T) {

@@ -13,11 +13,8 @@ func ComparePrerelease(left, right string) int {
 		case leftNumeric && rightNumeric:
 			// Valid numeric identifiers have no leading zeros, so length gives
 			// their numeric order before comparing equally long digit strings.
-			if len(a[i]) < len(b[i]) {
-				return -1
-			}
-			if len(a[i]) > len(b[i]) {
-				return 1
+			if order := CompareNumeric(a[i], b[i]); order != 0 {
+				return order
 			}
 		case leftNumeric:
 			return -1

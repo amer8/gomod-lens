@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/amer8/gomod-lens/internal/graph"
+	"github.com/amer8/gomod-lens/internal/semver"
 )
 
 type depsDevVersion struct {
@@ -215,8 +216,8 @@ func sourceProjectIDs(modulePath string, relatedProjects []depsDevRelatedProject
 
 func needsIncompatible(modulePath, version string) bool {
 	parsed := parseGoVersion(version)
-	if parsed == nil || parsed.Major < 2 || strings.Contains(version, "+incompatible") {
+	if parsed == nil || semver.CompareNumeric(parsed.Major, "2") < 0 || strings.Contains(version, "+incompatible") {
 		return false
 	}
-	return !strings.HasSuffix(modulePath, "/v"+itoa(parsed.Major))
+	return !strings.HasSuffix(modulePath, "/v"+parsed.Major)
 }

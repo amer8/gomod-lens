@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func TestRemoteAnalysisRejectsLocalReplacementsBeforeLoadingGraph(t *testing.T) 
 			runner := offlineRunner(t, modules)
 			analysisGraphLoads := 0
 			guard := fakeRunner(func(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
-				if filepath.Base(dir) == "analysis" && (commandKey(name, args...) == "go list -m -json all" || commandKey(name, args...) == "go mod graph") {
+				if filepath.Base(dir) == "analysis" && (commandKey(name, args...) == "go mod download all" || commandKey(name, args...) == "go list -m -json all" || commandKey(name, args...) == "go mod graph") {
 					analysisGraphLoads++
 				}
 				return runner.Run(ctx, dir, env, name, args...)
@@ -62,12 +63,12 @@ func TestRemoteAnalysisPopulatesMissingChecksumsWithoutChangingDownload(t *testi
 	var sourceDir string
 	runner := fakeRunner(func(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
 		out, err := base.Run(ctx, dir, env, name, args...)
-		if err == nil && commandKey(name, args...) == "go list -m -json all" && filepath.Base(dir) != "analysis" {
-			list, _, parseErr := parseModuleList(out)
-			if parseErr != nil {
-				t.Fatal(parseErr)
+		if err == nil && strings.HasPrefix(commandKey(name, args...), "go mod download -json ") {
+			var download struct{ Dir string }
+			if err := json.Unmarshal(out, &download); err != nil {
+				t.Fatal(err)
 			}
-			sourceDir = list["example.org/root@v1.0.0"].Dir
+			sourceDir = download.Dir
 		}
 		if dir == sourceDir {
 			t.Fatal("Go command ran in the immutable downloaded module")
@@ -89,6 +90,60 @@ func TestRemoteAnalysisPopulatesMissingChecksumsWithoutChangingDownload(t *testi
 	}
 	if _, err := os.Stat(filepath.Join(sourceDir, "go.sum")); !os.IsNotExist(err) {
 		t.Fatalf("downloaded go.sum was modified: %v", err)
+	}
+}
+
+func TestRemoteAnalysisAppliesRootReplacementsBeforeLoadingDependencies(t *testing.T) {
+	for _, goVersion := range []string{"1.16", "1.26"} {
+		t.Run(goVersion, func(t *testing.T) {
+			modules := map[string]string{
+				"example.org/root@v1.0.0": "module example.org/root\n\ngo " + goVersion + "\nrequire example.org/unpublished v1.0.0\nreplace example.org/unpublished => example.org/fork v1.0.0\n",
+				"example.org/fork@v1.0.0": "module example.org/fork\n\ngo " + goVersion + "\n",
+			}
+			base := offlineRunner(t, modules)
+			var dependencyDir string
+			analyzer := NewAnalyzer(fakeRunner(func(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error) {
+				output, err := base.Run(ctx, dir, env, name, args...)
+				if err == nil && commandKey(name, args...) == "go list -m -json all" {
+					list, _, parseErr := parseModuleList(output)
+					if parseErr != nil {
+						t.Fatal(parseErr)
+					}
+					dependencyDir = list["example.org/unpublished@v1.0.0"].Dir
+				}
+				return output, err
+			}))
+			analyzer.SetLenses()
+			result, err := analyzer.Analyze(context.Background(), Request{Target: "example.org/root@v1.0.0", Mode: ModeModule})
+			if err != nil {
+				t.Fatal(err)
+			}
+			nodes := indexNodes(result.Nodes)
+			dep := nodes["example.org/unpublished@v1.0.0"]
+			if len(nodes) != 2 || !dep.Direct || !dep.Replaced || dep.Replacement != "example.org/fork@v1.0.0" {
+				t.Fatalf("replacement-backed graph is incorrect: %+v", result.Nodes)
+			}
+			if dependencyDir == "" {
+				t.Fatal("replacement source directory is unavailable for license detection")
+			}
+			if _, err := os.Stat(filepath.Join(dependencyDir, "fixture.go")); err != nil {
+				t.Fatalf("replacement source archive was not downloaded: %v", err)
+			}
+		})
+	}
+}
+
+func TestRemoteAnalysisUsesDeclaredPathFromDownloadedMetadata(t *testing.T) {
+	analyzer := NewAnalyzer(offlineRunner(t, map[string]string{
+		"example.org/alias@v1.0.0": "module example.org/canonical\n\ngo 1.26\n",
+	}))
+	analyzer.SetLenses()
+	result, err := analyzer.Analyze(context.Background(), Request{Target: "example.org/alias@v1.0.0", Mode: ModeModule})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RootID != "example.org/canonical@v1.0.0" || result.Meta.Target != result.RootID || len(result.Nodes) != 1 {
+		t.Fatalf("declared module identity was not preserved: %+v", result)
 	}
 }
 

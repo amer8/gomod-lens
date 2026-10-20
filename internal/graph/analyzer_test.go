@@ -145,7 +145,7 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 	mustWriteFile(t, filepath.Join(moduleDir, "go.mod"), "module github.com/example/graph\n")
 	runner := fakeRunner(func(_ context.Context, workdir string, _ []string, name string, args ...string) ([]byte, error) {
 		switch commandKey(name, args...) {
-		case "go get github.com/example/graph@latest":
+		case "go mod download -json github.com/example/graph@latest":
 			goMod, err := os.ReadFile(filepath.Join(workdir, "go.mod"))
 			if err != nil {
 				t.Fatalf("read temp go.mod: %v", err)
@@ -153,20 +153,18 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 			if got := string(goMod); got != remoteModuleSeedGoMod {
 				t.Fatalf("temp go.mod = %q", got)
 			}
-			return []byte(""), nil
+			return fmt.Appendf(nil, `{"Path":"github.com/example/graph","Version":"v1.4.0","Dir":%q,"GoMod":%q}`, moduleDir, filepath.Join(moduleDir, "go.mod")), nil
 		case "go list -m -json all":
-			if filepath.Base(workdir) == "analysis" {
-				return []byte(strings.Join([]string{
-					fmt.Sprintf(`{"Path":"github.com/example/graph","Main":true,"Dir":%q}`, moduleDir),
-					`{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Dir":"/modcache/yaml"}`,
-					`{"Path":"gopkg.in/check.v1","Version":"v0.0.0-20161208181325-20d25e280405","Dir":"/modcache/check"}`,
-				}, "\n")), nil
+			if filepath.Base(workdir) != "analysis" {
+				t.Fatalf("unexpected module list workdir: %s", workdir)
 			}
 			return []byte(strings.Join([]string{
-				`{"Path":"gomod-lens/tmp","Main":true}`,
-				fmt.Sprintf(`{"Path":"github.com/example/graph","Version":"v1.4.0","Dir":%q}`, moduleDir),
-				`{"Path":"example.com/temp-only","Version":"v0.1.0","Dir":"/modcache/temp-only"}`,
+				fmt.Sprintf(`{"Path":"github.com/example/graph","Main":true,"Dir":%q}`, moduleDir),
+				`{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Dir":"/modcache/yaml"}`,
+				`{"Path":"gopkg.in/check.v1","Version":"v0.0.0-20161208181325-20d25e280405","Dir":"/modcache/check"}`,
 			}, "\n")), nil
+		case "go mod download all":
+			return nil, nil
 		case "go mod graph":
 			if filepath.Base(workdir) != "analysis" {
 				t.Fatalf("unexpected module graph workdir: %s", workdir)
@@ -177,10 +175,10 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 				"go.yaml.in/yaml/v3@v3.0.0 example.com/non-selected@v1.0.0",
 			}, "\n")), nil
 		case "go mod edit -json":
-			if filepath.Base(workdir) == "analysis" {
-				return []byte(`{"Require":[{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Indirect":false}]}`), nil
+			if filepath.Base(workdir) != "analysis" {
+				t.Fatalf("unexpected metadata workdir: %s", workdir)
 			}
-			return []byte(`{"Require":[{"Path":"github.com/example/graph","Version":"v1.4.0","Indirect":true},{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Indirect":true},{"Path":"gopkg.in/check.v1","Version":"v0.0.0-20161208181325-20d25e280405","Indirect":true}]}`), nil
+			return []byte(`{"Require":[{"Path":"go.yaml.in/yaml/v3","Version":"v3.0.4","Indirect":false}]}`), nil
 		default:
 			t.Fatalf("unexpected command: %s", commandKey(name, args...))
 			return nil, nil
@@ -201,12 +199,6 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 	}
 
 	nodeByID := indexNodes(graph.Nodes)
-	if _, ok := nodeByID["gomod-lens/tmp"]; ok {
-		t.Fatalf("synthetic temp module should not be present in filtered graph")
-	}
-	if _, ok := nodeByID["example.com/temp-only@v0.1.0"]; ok {
-		t.Fatalf("temp resolver dependencies should not be present in filtered graph")
-	}
 	if _, ok := nodeByID["go.yaml.in/yaml/v3@v3.0.0"]; ok {
 		t.Fatalf("non-selected module version should not be present in filtered graph")
 	}
@@ -234,54 +226,32 @@ func TestAnalyzeModuleKeepsTransitiveDependencies(t *testing.T) {
 	}
 }
 
-func TestAnalyzeModuleRetriesDeclaredModulePath(t *testing.T) {
+func TestAnalyzeModuleUsesDeclaredModulePath(t *testing.T) {
 	t.Parallel()
 
 	moduleDir := t.TempDir()
 	mustWriteFile(t, filepath.Join(moduleDir, "go.mod"), "module tailscale.com\n")
 	runner := fakeRunner(func(_ context.Context, workdir string, _ []string, name string, args ...string) ([]byte, error) {
 		switch commandKey(name, args...) {
-		case "go get github.com/tailscale/tailscale@latest":
-			return nil, &CommandError{
-				Command: "go get github.com/tailscale/tailscale@latest",
-				Output: strings.Join([]string{
-					"go: github.com/tailscale/tailscale@v1.98.2: parsing go.mod:",
-					"\tmodule declares its path as: tailscale.com",
-					"\tbut was required as: github.com/tailscale/tailscale",
-				}, "\n"),
-				Err: fmt.Errorf("exit status 1"),
-			}
-		case "go get tailscale.com@latest":
-			goMod, err := os.ReadFile(filepath.Join(workdir, "go.mod"))
-			if err != nil {
-				t.Fatalf("read temp go.mod: %v", err)
-			}
-			if got := string(goMod); got != remoteModuleSeedGoMod {
-				t.Fatalf("temp go.mod = %q", got)
-			}
-			return nil, nil
+		case "go mod download -json github.com/tailscale/tailscale@latest":
+			return fmt.Appendf(nil, `{"Path":"github.com/tailscale/tailscale","Version":"v1.98.2","Dir":%q,"GoMod":%q}`, moduleDir, filepath.Join(moduleDir, "go.mod")), nil
 		case "go list -m -json all":
-			if filepath.Base(workdir) == "analysis" {
-				return []byte(strings.Join([]string{
-					fmt.Sprintf(`{"Path":"tailscale.com","Main":true,"Dir":%q}`, moduleDir),
-					`{"Path":"golang.org/x/sys","Version":"v0.37.0","Dir":"/modcache/sys"}`,
-				}, "\n")), nil
+			if filepath.Base(workdir) != "analysis" {
+				t.Fatalf("unexpected module list workdir: %s", workdir)
 			}
 			return []byte(strings.Join([]string{
-				`{"Path":"gomod-lens/tmp","Main":true}`,
-				fmt.Sprintf(`{"Path":"tailscale.com","Version":"v1.98.2","Dir":%q}`, moduleDir),
+				fmt.Sprintf(`{"Path":"tailscale.com","Main":true,"Dir":%q}`, moduleDir),
 				`{"Path":"golang.org/x/sys","Version":"v0.37.0","Dir":"/modcache/sys"}`,
 			}, "\n")), nil
+		case "go mod download all":
+			return nil, nil
 		case "go mod graph":
 			if filepath.Base(workdir) != "analysis" {
 				t.Fatalf("unexpected module graph workdir: %s", workdir)
 			}
 			return []byte("tailscale.com golang.org/x/sys@v0.37.0\n"), nil
 		case "go mod edit -json":
-			if filepath.Base(workdir) == "analysis" {
-				return []byte(`{"Require":[{"Path":"golang.org/x/sys","Version":"v0.37.0","Indirect":false}]}`), nil
-			}
-			return []byte(`{"Require":[{"Path":"tailscale.com","Version":"v1.98.2","Indirect":false},{"Path":"golang.org/x/sys","Version":"v0.37.0","Indirect":true}]}`), nil
+			return []byte(`{"Require":[{"Path":"golang.org/x/sys","Version":"v0.37.0","Indirect":false}]}`), nil
 		default:
 			t.Fatalf("unexpected command: %s", commandKey(name, args...))
 			return nil, nil
@@ -456,20 +426,6 @@ func TestAnalyzeLocalPrunesNonSelectedGraphVersions(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected replacement-backed versions to use replacement license, got %+v", graph.PackageInfo.Licenses)
-}
-
-func TestPickRootModuleIDMatchesResolvedVersion(t *testing.T) {
-	t.Parallel()
-
-	id, err := pickRootModuleID("github.com/example/graph", map[string]bool{
-		"github.com/example/graph@v1.4.0": true,
-	})
-	if err != nil {
-		t.Fatalf("pickRootModuleID() error = %v", err)
-	}
-	if id != "github.com/example/graph@v1.4.0" {
-		t.Fatalf("pickRootModuleID() = %q", id)
-	}
 }
 
 type fakeRunner func(ctx context.Context, dir string, env []string, name string, args ...string) ([]byte, error)
