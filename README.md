@@ -30,6 +30,14 @@ and license evidence when those views are opened. These browser observations
 are not included in `/api/graph`. Both layers can be extended; see the
 [lens developer guide](docs/development/lenses.md).
 
+The **Graph assistant** adds a collapsible chat dock with three contextual
+starter questions and three follow-ups after each answer. It connects answers
+to module selections, graph highlights, and source evidence. Chat requires
+WebLLM and a loaded model. A searchable, sortable comparison table offers ten curated browser-friendly models with download and memory estimates. Supported models think automatically; switch the
+loaded model while retaining chat history. Custom questions receive streamed answers using
+module evidence and conversation context, including source repository links. See [the assistant guide](docs/features/graph-assistant.md) for its
+scope, model download, privacy, and reproduction steps.
+
 ## Scorecard details
 
 The Scorecard lens shows the selected module’s source repository report with

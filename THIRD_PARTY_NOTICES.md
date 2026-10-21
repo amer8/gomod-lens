@@ -28,6 +28,22 @@ Full upstream notices for vendored browser runtime files are copied into
 `internal/app/web/static/vendor/LICENSES.txt`. The Pages artifact receives a
 generated copy at `dist/assets/vendor/LICENSES.txt`.
 
+## Graph assistant local AI
+
+| Component | Version | License | Use |
+| --- | --- | --- | --- |
+| [WebLLM](https://github.com/mlc-ai/web-llm) | `0.2.86` | Apache-2.0 | Imported from jsDelivr when opening the model chooser to inspect cache state; interprets suggested investigations and generates custom answers locally in a Web Worker |
+| [WebLLM model catalog](https://github.com/mlc-ai/web-llm/blob/v0.2.86/src/config.ts) | `0.2.86` selected language-model variants | Catalog configuration: Apache-2.0; individual weights have their respective upstream licenses | Metadata snapshot in `assistant/model-catalog.js`; weights load only on explicit selection. Each choice links its upstream model card and license |
+
+The recommended default is [Qwen2.5-1.5B-Instruct](https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f32_1-MLC)
+(Apache-2.0). Other selected weights include models under Llama community license terms
+and Microsoft Phi under MIT. See the selected model card for its applicable notices.
+On-demand runtime/model files are not vendored in this repository. Their upstream
+distributions retain their respective license notices. Model download-size metadata
+comes from public Hugging Face file listings. See the
+[model catalog maintenance instructions](docs/features/graph-assistant.md#loading-webllm)
+when updating the committed snapshot.
+
 ## Artwork
 
 | Asset | License | Use |

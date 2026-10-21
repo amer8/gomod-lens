@@ -65,7 +65,12 @@ export function renderGraph(container, payload, options = {}) {
   })
   syncGalaxyViewport(container)
   scene.on('transform', (transform) => syncGalaxyViewport(container, transform))
-  scene.on('resize', () => syncGalaxyViewport(container))
+  scene.on('resize', () => {
+    syncGalaxyViewport(container)
+    // The scene resets its transform on container resize. Refit the resolved
+    // layout when the assistant dock changes the graph's available height.
+    if (hasInitialFit) void fitCurrentLayout()
+  })
 
   nodeCol = new NodeCollection({
     graph,
@@ -328,6 +333,7 @@ function layoutEnergyThreshold() {
 
 function syncGalaxyViewport(container, transform = scene?.drawContext?.transform) {
   if (!container || !transform) return
+  const backdrop = container.closest('#app') || container
 
   const zoom = clamp(Number(transform.scale) || 1, 0.08, 40)
   const zoomLevel = Math.log2(zoom)
@@ -336,16 +342,17 @@ function syncGalaxyViewport(container, transform = scene?.drawContext?.transform
   const x = Number(transform.x) || 0
   const y = Number(transform.y) || 0
 
-  container.style.setProperty('--galaxy-pan-x', `${clamp(x * 0.045, -280, 280).toFixed(2)}px`)
-  container.style.setProperty('--galaxy-pan-y', `${clamp(y * 0.045, -220, 220).toFixed(2)}px`)
-  container.style.setProperty('--galaxy-band-pan-x', `${clamp(x * 0.026, -180, 180).toFixed(2)}px`)
-  container.style.setProperty('--galaxy-band-pan-y', `${clamp(y * 0.026, -140, 140).toFixed(2)}px`)
-  container.style.setProperty('--galaxy-scale', starScale.toFixed(3))
-  container.style.setProperty('--galaxy-band-scale', bandScale.toFixed(3))
+  backdrop.style.setProperty('--galaxy-pan-x', `${clamp(x * 0.045, -280, 280).toFixed(2)}px`)
+  backdrop.style.setProperty('--galaxy-pan-y', `${clamp(y * 0.045, -220, 220).toFixed(2)}px`)
+  backdrop.style.setProperty('--galaxy-band-pan-x', `${clamp(x * 0.026, -180, 180).toFixed(2)}px`)
+  backdrop.style.setProperty('--galaxy-band-pan-y', `${clamp(y * 0.026, -140, 140).toFixed(2)}px`)
+  backdrop.style.setProperty('--galaxy-scale', starScale.toFixed(3))
+  backdrop.style.setProperty('--galaxy-band-scale', bandScale.toFixed(3))
 }
 
 function resetGalaxyViewport(container) {
   if (!container) return
+  const backdrop = container.closest('#app') || container
 
   for (const property of [
     '--galaxy-pan-x',
@@ -355,7 +362,7 @@ function resetGalaxyViewport(container) {
     '--galaxy-scale',
     '--galaxy-band-scale',
   ]) {
-    container.style.removeProperty(property)
+    backdrop.style.removeProperty(property)
   }
 }
 
@@ -382,9 +389,15 @@ async function finishLayout() {
   clearLayoutStopTimer()
   if (!hasInitialFit && layout) {
     hasInitialFit = true
-    const bounds = await layout.getBounds()
-    scene?.fitToView(bounds, 48)
+    await fitCurrentLayout(48)
   }
+}
+
+async function fitCurrentLayout(padding = 32) {
+  const capturedLayout = layout, capturedScene = scene
+  if (!capturedLayout || !capturedScene) return
+  const bounds = await capturedLayout.getBounds()
+  if (layout === capturedLayout && scene === capturedScene) capturedScene.fitToView(bounds, padding)
 }
 
 function importance(data) {

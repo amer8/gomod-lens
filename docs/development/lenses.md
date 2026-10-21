@@ -24,7 +24,7 @@ Paths below are relative to the repository root.
 | `internal/graphview/` | Go graph summary groups used by both deployments |
 | `internal/app/web/static/analysis/registry.js` | Browser IDs, module keys, headings, toolbar labels, glyphs and imports |
 | `internal/app/web/static/analysis/types.js` | JSDoc browser lens contract for editors |
-| `internal/app/web/static/analysis/index.js` | Browser selection, loading, caching, cancellation and shared inspector |
+| `internal/app/web/static/analysis/index.js` | Browser selection, loading, caching, cancellation and sidebar rendering |
 | `internal/app/web/static/analysis/navigation.js` | URL handling using the registry |
 | `internal/app/web/static/analysis/public-data.js` | Public JSON fetching, resolved identities and bounded module lookups |
 | `internal/app/web/static/analysis/ui.js` | Shared DOM, tables, search, badges and disclosures |
@@ -54,8 +54,6 @@ the currently selected `node`, `data`, `state`, and these callbacks:
 - `highlight({ids, nodesOnly, color})` highlights graph nodes. An empty `ids`
   array clears the explicit highlight. The graph renderer treats a single ID
   as a node selection.
-- `inspect(content)` places an element in the shared collapsible inspector.
-  It floats beside the graph on desktop and moves into the drawer on mobile.
 
 The controller converts a thrown load error into `{error: message}`. Both
 `render` and optional `status`/`colors` callbacks must handle that shape. A

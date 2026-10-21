@@ -7,6 +7,9 @@
     --scene-background: #050712;
     --button-color: #d8dbe3;
     --left-panel-width: 400px;
+    --panel-background: rgba(255, 255, 255, 0.1);
+    --panel-backdrop-filter: blur(30px) saturate(1.7);
+    --panel-border-color: rgba(255, 255, 255, 0.18);
 }
 
 html,
@@ -73,8 +76,9 @@ pre {
     overflow: hidden;
 }
 
-.graph-empty,
-.graphView {
+/* The scene fills the app, independently of the graph's drawable area. Both
+   glass panels must sample this backdrop even when the graph is shortened. */
+#app {
     --galaxy-pan-x: 0px;
     --galaxy-pan-y: 0px;
     --galaxy-band-pan-x: 0px;
@@ -84,7 +88,7 @@ pre {
     position: relative;
     width: 100%;
     height: 100%;
-    overflow: hidden;
+    overflow: clip;
     background:
         linear-gradient(118deg, rgba(229, 161, 90, 0.08) 0%, transparent 24% 76%, rgba(82, 204, 227, 0.1) 100%),
         radial-gradient(ellipse 115% 62% at 62% 44%, rgba(82, 204, 227, 0.18) 0%, rgba(82, 204, 227, 0.08) 26%, transparent 64%),
@@ -92,10 +96,8 @@ pre {
         linear-gradient(180deg, #0a0c1d 0%, var(--scene-background) 54%, #03040a 100%);
 }
 
-.graph-empty::before,
-.graph-empty::after,
-.graphView::before,
-.graphView::after {
+#app::before,
+#app::after {
     content: "";
     position: absolute;
     inset: -18%;
@@ -103,8 +105,7 @@ pre {
     pointer-events: none;
 }
 
-.graph-empty::before,
-.graphView::before {
+#app::before {
     background-image:
         radial-gradient(circle at 16px 24px, rgba(255, 255, 255, 0.88) 0 1px, transparent 1.4px),
         radial-gradient(circle at 92px 72px, rgba(183, 248, 255, 0.72) 0 1px, transparent 1.5px),
@@ -117,8 +118,7 @@ pre {
     animation: star-drift 110s linear infinite;
 }
 
-.graph-empty::after,
-.graphView::after {
+#app::after {
     background:
         linear-gradient(112deg, transparent 18%, rgba(183, 248, 255, 0.04) 36%, rgba(224, 222, 15, 0.06) 48%, rgba(185, 133, 255, 0.05) 58%, transparent 78%),
         repeating-radial-gradient(ellipse at 50% 50%, transparent 0 22px, rgba(255, 255, 255, 0.025) 23px 24px, transparent 25px 44px);
@@ -181,6 +181,14 @@ pre {
     display: flex;
 }
 
+/* Keep the assistant on the same glass surface as the sidebar. */
+.left-panel,
+.assistant-dock {
+    background: var(--panel-background);
+    backdrop-filter: var(--panel-backdrop-filter);
+    -webkit-backdrop-filter: var(--panel-backdrop-filter);
+}
+
 .left-panel {
     position: absolute;
     top: 0;
@@ -193,12 +201,9 @@ pre {
     flex-direction: column;
     z-index: 2;
     overflow: hidden;
-    background: rgba(255, 255, 255, 0.1);
     border: 0;
-    border-right: 1px solid rgba(255, 255, 255, 0.18);
+    border-right: 1px solid var(--panel-border-color);
     border-radius: 0;
-    backdrop-filter: blur(30px) saturate(1.7);
-    -webkit-backdrop-filter: blur(30px) saturate(1.7);
 }
 
 .left-panel-empty {
@@ -220,7 +225,7 @@ pre {
 
 .search {
     width: auto;
-    margin: 14px;
+    margin: 16px;
 }
 
 .control-stack {
@@ -342,6 +347,8 @@ pre {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(176, 194, 219, 0.35) transparent;
     background-color: transparent;
     padding: 0 16px 20px;
     color: var(--primary-color);
@@ -530,7 +537,7 @@ pre {
     border-color: #f2c14e;
     box-shadow:
         0 0 0 2px rgba(242, 193, 78, 0.18),
-        0 0 14px rgba(242, 193, 78, 0.34);
+        0 0 10px rgba(242, 193, 78, 0.22);
 }
 
 .lens-circle:focus-visible {
@@ -642,9 +649,13 @@ pre {
     border: 1px solid rgba(255, 255, 255, 0.36);
 }
 
+.graph-empty,
 .graphView {
+    position: relative;
+    z-index: 1;
     width: 100%;
     height: 100%;
+    overflow: hidden;
 }
 
 .graphView canvas,
@@ -677,10 +688,8 @@ pre {
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .graph-empty::before,
-    .graph-empty::after,
-    .graphView::before,
-    .graphView::after {
+    #app::before,
+    #app::after {
         animation: none;
     }
 }

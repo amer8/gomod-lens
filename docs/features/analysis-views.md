@@ -4,7 +4,7 @@ The Go web UI and static WebAssembly UI share four analysis lenses:
 
 | Lens query | Design | Interaction |
 | --- | --- | --- |
-| `openssf` (default) | Repository on graph | Select a module and inspect its repository checks beside the graph. |
+| `openssf` (default) | Repository checks | Select a module and inspect its repository checks in the sidebar. |
 | `release-freshness` | Update queues | Start with all modules. Select a release gap to filter and highlight matching graph nodes; click it again to show all modules. |
 | `vulnerabilities` | Result groups | Expand matched, no-match and unknown groups; select a module to inspect advisories. |
 | `licenses` | Evidence inventory | Filter the module table and inspect exact-version source expressions. |
@@ -21,9 +21,9 @@ or removed lens IDs fall back to Scorecard while preserving the module target.
 
 Run `make run` for the Go web UI, or `make wasm` followed by `make serve` for the
 static version. Both deployments ship identical analysis modules and styling.
-The Scorecard inspector collapses with its summary. On smaller screens it moves
-into the sidebar drawer, before the overview. The existing Expand panel button
-provides more room. The sidebar remains collapsible, with the default-collapsed
+Scorecard summary, check search, filters, expandable check evidence, and report
+provenance all appear in the sidebar on desktop and mobile, using its single
+scroll area. The existing Expand panel button provides more room on small screens. The sidebar remains collapsible, with the default-collapsed
 gopher at the bottom right.
 
 ## Reproduction

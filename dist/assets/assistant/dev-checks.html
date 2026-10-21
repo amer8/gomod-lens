@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>gomod-lens · Developer model checks</title>
+<style>
+:root{color-scheme:dark;font:14px/1.5 system-ui;background:#101522;color:#e5edf8}body{margin:32px auto;padding:0 24px;max-width:1200px}h1{font-size:24px}p{color:#bccadd}button{padding:9px 16px;margin-right:8px;border:1px solid #65738d;border-radius:6px;background:#28364d;color:inherit;cursor:pointer}button:disabled{opacity:.4;cursor:default}table{width:100%;border-collapse:collapse;margin:24px 0}th,td{padding:10px 12px;border-bottom:1px solid #ffffff20;text-align:left}th{color:#a9bfdc}td:first-child{overflow-wrap:anywhere}progress{width:100%;height:8px;accent-color:#80cfe6}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:16px;background:#ffffff07}summary{cursor:pointer}#status{min-height:24px}a{color:#a9dce9}[data-kind=passed]{color:#9cdec1}[data-kind=failed],[data-kind=error]{color:#efb89b}
+</style>
+<h1>Developer model checks</h1>
+<p>Runs three fixed assistant fixtures on each shortlisted model using the production worker and prompts. Models load sequentially; only one occupies GPU memory. This downloads model weights when uncached. Results describe these fixtures on this device, not general answer quality.</p>
+<button id="run">Run all 10 models</button><button id="stop" disabled>Stop</button><button id="download" disabled>Download report</button>
+<p id="status" role="status">Ready. No checks run.</p><progress id="progress" max="1" value="0" aria-label="Current model loading progress"></progress>
+<table><thead><tr><th>Model</th><th>Status</th><th>Planning</th><th>Repository</th><th>ISC lookup</th></tr></thead><tbody id="models"></tbody></table>
+<details><summary>Report JSON</summary><pre id="report">No report yet.</pre></details>
+<script type="module" src="./dev-checks.js"></script>
+</html>

@@ -24,12 +24,14 @@ export async function loadReport(node, { signal, fetcher } = {}) {
   const source = 'https://api.deps.dev/v3/projects/' + encodeURIComponent(project)
   return normalizeReport(await publicJSON(source, { signal, fetcher }), source)
 }
-function render({ host, data, node, state = {}, inspect }) {
+function render({ host, data, node, state = {} }) {
   if (data.error || data.missing) { host.append(notice(data.error || data.message || 'This repository has no published Scorecard report.', 'analysis-empty')); return }
   const unknown = data.checks.filter(check => check.score === null).length
   host.append(metrics([[data.score === null ? '—' : data.score.toFixed(1), 'Repository score'], [data.checks.length, 'Reported checks'], [unknown, 'Unavailable']]))
   host.append(notice('Captured ' + (data.date ? data.date.slice(0, 10) : 'at an unknown date') + '. This repository snapshot may differ from the selected ' + (node.version || 'module version') + '.'))
-  const evidenceHost = element('div')
+  const evidenceHost = element('section', undefined, 'analysis-section')
+  evidenceHost.setAttribute('aria-label', 'Repository checks')
+  evidenceHost.append(element('h5', 'Repository checks'))
   if (!data.checks.length) evidenceHost.append(notice('The source supplied an aggregate score without individual checks.', 'analysis-empty'))
   else {
     const filters = element('div', undefined, 'analysis-filters'), search = element('input'), mode = element('select'), list = element('div'), count = notice('')
@@ -67,8 +69,7 @@ function render({ host, data, node, state = {}, inspect }) {
   if (data.repository.commit) provenance.append(element('div', 'Assessed commit: ' + data.repository.commit))
   provenance.append(element('div', 'Retrieved: ' + data.fetchedAt), link('View source report ↗', data.source))
   evidenceHost.append(provenance)
-  host.append(notice('Select a module to inspect its repository report alongside the graph.'))
-  inspect(evidenceHost)
+  host.append(evidenceHost)
 }
 /** @type {import('./types.js').BrowserLens} */
 const lens = {
