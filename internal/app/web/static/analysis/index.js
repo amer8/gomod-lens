@@ -2,6 +2,8 @@ import { clearPublicCache } from './public-data.js'
 import { browserLenses, defaultLensID } from './registry.js'
 import { element, action, notice } from './ui.js'
 import { selectedLens, lensURL } from './navigation.js'
+import { createGraphAssistant } from '../assistant/index.js'
+import { createLensTooltip } from './lens-tooltip.js'
 export function createAnalysisViews({ selectNode, setColors, highlight }) {
   const ready = Promise.all(browserLenses.map(async registration => ({
     ...(await registration.importModule()).default,
@@ -12,27 +14,29 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
   let preferred = selectedLens(new URLSearchParams(window.location.search).get('lens'))
   const panels = new Map(), results = new Map(), requests = new Map(), states = new Map()
   window.history.replaceState(window.history.state, '', lensURL(window.location.href, preferred))
-  const app = document.getElementById('app'), mobile = window.matchMedia('(max-width: 960px)')
-  const inspector = element('details', undefined, 'analysis-view analysis-graph-inspector')
-  const inspectorHeading = element('summary'), inspectorBody = element('div', undefined, 'analysis-inspector-body')
-  inspector.open = true; inspector.hidden = true; inspector.append(inspectorHeading, inspectorBody)
-  inspector.setAttribute('aria-label', 'Selected module inspector'); app.append(inspector)
-  function positionInspector() {
-    const parent = mobile.matches && active ? panels.get(active.key) : app
-    if (!parent) return
-    const body = mobile.matches ? parent.querySelector('.analysis-body') : null
-    if (body) {
-      if (inspector.nextElementSibling !== body) parent.insertBefore(inspector, body)
-    } else if (inspector.parentNode !== parent) parent.append(inspector)
-  }
-  function layout() {
-    app.dataset.analysisLens = active?.id || preferred
-    positionInspector()
-  }
-  mobile.addEventListener('change', positionInspector)
+  const app = document.getElementById('app')
+  const resetLensTooltip = createLensTooltip(document.getElementById('lens-toolbar'), app)
+  const assistant = createGraphAssistant({ app, select, highlight,
+    openLens(id) { document.querySelector(`#lens-toolbar [data-lens-panel-target="${id}"]`)?.click() },
+    async loadEvidence(id, nodeID, signal) {
+      const module = modules.find(value => value.id === id)
+      if (!module || !graph || !controller) throw new Error('Load a module graph first.')
+      const capturedGraph = graph, node = graph.nodes.find(value => value.id === nodeID)
+      if (!node) throw new Error('The selected module is no longer in this graph.')
+      const key = module.selection ? module.key + ':' + nodeID : module.key
+      if (requests.has(key)) await requests.get(key)
+      signal.throwIfAborted()
+      if (results.has(key)) return results.get(key)
+      return module.load(capturedGraph, { node, signal: AbortSignal.any([signal, controller.signal]), progress() {} })
+    },
+  })
+  function syncAssistant() { if (graph && controller) assistant.setContext({ graph, selected, lens: preferred }) }
+  function layout() { app.dataset.analysisLens = active?.id || preferred }
   layout()
   // Abort upstream work and invalidate completions from the previous graph.
   const stop = () => {
+    resetLensTooltip()
+    assistant.loading()
     generation++
     controller?.abort()
     controller = null
@@ -44,7 +48,6 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
       const picker = panel.querySelector('.analysis-module-select'); if (picker) picker.disabled = true
       panel.setAttribute('aria-busy', 'true')
     }
-    inspector.hidden = true; inspectorBody.replaceChildren(); app.append(inspector)
     panels.clear()
     results.clear()
     requests.clear()
@@ -61,9 +64,9 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
       const scroll = panels.get(module?.key)?.closest('.infoBox')
       if (scroll) scroll.scrollTop = 0
     }
-    inspector.hidden = true
     if (!module || !graph) { active = null; setColors(null); return }
     active = module
+    syncAssistant()
     layout()
     paint(); void render(module)
   }
@@ -73,8 +76,8 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
   }
   function select(id) {
     if (!graph?.nodes.some(node => node.id === id)) return
-    const changed = selected !== id
-    selected = id; selectNode(id); if (changed) inspector.open = true
+    selected = id; selectNode(id)
+    syncAssistant()
     paint()
     if (active) {
       const fromTable = document.activeElement?.closest('.analysis-module')
@@ -89,7 +92,7 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
     const panel = panels.get(module.key); if (!panel || !graph) return
     // Repository reports load per selection; inventories load once per graph.
     const requestKey = module.selection ? module.key + ':' + selected : module.key
-    if (refresh) { clearPublicCache(); results.delete(requestKey); results.delete(module.key); paint() }
+    if (refresh) { clearPublicCache(); assistant.invalidate(module.id, selected); results.delete(requestKey); results.delete(module.key); paint() }
     if (module.selection && results.has(requestKey)) results.set(module.key, results.get(requestKey))
     const data = module.selection ? results.get(requestKey) : results.get(module.key)
     const host = panel.querySelector('.analysis-body'), status = panel.querySelector('.analysis-status'), retry = panel.querySelector('.analysis-refresh')
@@ -97,22 +100,18 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
     if (selectedControl) selectedControl.value = selected
     panel.querySelector('.analysis-selected-name').textContent = graph.nodes.find(n => n.id === selected)?.name || ''
     if (data !== undefined) {
+      assistant.observe(module.id, data, selected)
       panel.removeAttribute('aria-busy')
       status.textContent = module.status?.(data) || 'Analysis ready'; retry.disabled = false
       if (!states.has(module.key)) states.set(module.key, {})
-      inspector.hidden = true; inspectorBody.replaceChildren()
       const node = graph.nodes.find(n => n.id === selected)
-      inspectorHeading.textContent = module.title + ' · ' + node.name
-      host.replaceChildren(); module.render({ host, graph, node, data, select, highlight, state: states.get(module.key), inspect(content) {
-        inspectorBody.append(content); inspector.hidden = false; positionInspector()
-      } })
-      for (const button of [...host.querySelectorAll('[data-node-id]'), ...inspectorBody.querySelectorAll('[data-node-id]')]) {
+      host.replaceChildren(); module.render({ host, graph, node, data, select, highlight, state: states.get(module.key) })
+      for (const button of host.querySelectorAll('[data-node-id]')) {
         if (button.dataset.nodeId === selected) button.setAttribute('aria-current', 'true')
       }
       if (active === module) paint()
       return
     }
-    inspector.hidden = true
     host.replaceChildren(notice(module.selection ? 'Loading the selected repository’s public report…' : 'Reading exact public module versions…'))
     status.textContent = 'Loading…'; retry.disabled = true; panel.setAttribute('aria-busy', 'true')
     if (requests.has(requestKey)) return
@@ -155,6 +154,7 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
       if (heading && toolbar) toolbar.replaceChildren(heading)
       const switcher = toolbar?.querySelector('.lens-switcher')
       if (!root || !switcher) return
+      switcher.querySelector('.lens-circle-add')?.removeAttribute('title')
       toolbar.hidden = false
       for (const module of modules) {
         let panel = root.querySelector(`[data-lens-panel="${module.id}"]`)
@@ -175,7 +175,7 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
         }
         button.className = `lens-circle lens-circle-${module.id}`
         button.textContent = module.icon
-        button.title = module.label
+        button.removeAttribute('title')
         button.setAttribute('aria-label', module.label)
         panel.classList.add('analysis-view')
         const head = element('div', undefined, 'analysis-heading'), title = element('div')

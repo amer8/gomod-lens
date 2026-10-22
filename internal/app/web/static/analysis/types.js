@@ -43,8 +43,6 @@
  * @property {Object<string, any>} state Lens-owned UI state, reset on graph changes.
  * @property {(id: string) => void} select Select a module and rerender the lens.
  * @property {(request: HighlightRequest) => void} highlight
- * @property {(content: HTMLElement) => void} inspect Place content in the shared
- * collapsible inspector (beside the graph on desktop, inside the mobile drawer).
  */
 
 /**
@@ -68,8 +66,9 @@
  * @typedef {Object} BrowserLensRegistration
  * @property {string} id Stable lowercase URL and panel identifier.
  * @property {string} key Unique module/state key; keep stable across releases.
- * @property {string} title Sidebar/inspector heading.
+ * @property {string} title Sidebar heading.
  * @property {string} label Accessible toolbar label and tooltip.
+ * @property {string} [description] Short factual capability description for app guidance.
  * @property {string} icon Toolbar glyph; colors/styles live in CSS.
  * @property {() => Promise<{default: BrowserLens}>} importModule
  */

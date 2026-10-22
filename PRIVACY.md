@@ -1,6 +1,6 @@
 # Privacy and External Services
 
-Last updated: October 20, 2026
+Last updated: October 21, 2026
 
 go.mod Lens is intended for exploring public Go modules. Do not enter private
 module paths, secret repository names, access tokens, or other non-public
@@ -69,6 +69,38 @@ are requested.
 See GitHub's API terms and search rate-limit documentation:
 <https://docs.github.com/en/site-policy/github-terms/github-terms-of-service>
 <https://docs.github.com/en/rest/search/search>
+
+## Graph assistant and local AI
+
+The graph assistant keeps its conversation in page memory, with no conversation
+upload, account, or persistent chat history. Questions use the loaded graph and
+may request the same public OSV/deps.dev evidence as the lenses above. Module
+paths and resolved versions are sent to those services; chat text is not.
+
+Chat requires a loaded local model. Opening the model chooser imports the
+pinned WebLLM runtime from `cdn.jsdelivr.net` in a temporary worker to check
+which models have browser-cached data; it does not load weights or allocate a GPU.
+The user-facing chat does not run model tests. A separate developer evaluation
+page can explicitly download and test the shortlist using fixed synthetic fixtures;
+its reports stay in page memory until the developer downloads them and are not
+uploaded to an external service.
+Choosing **Load model** or **Switch model** loads model files from
+`huggingface.co` and the model's GPU runtime from GitHub-hosted MLC artifacts.
+Those hosts receive normal artifact requests, including connection metadata;
+questions and graph context are processed locally in a Web Worker. The model
+uses module evidence and the last two completed exchanges from the current
+conversation to generate custom answers. Optional Qwen3 thinking runs in the same
+worker; thinking blocks are discarded before streaming to the page and are not
+added to conversation history. Suggested investigations use
+allowlisted analysis queries. Source links and graph actions are produced by
+the application; generated prose is displayed as text. Unsupported devices and failed model
+loads leave chat unavailable; there is no model-free fallback. The initial
+comparison table selects a model without downloading its weights. **Change model**
+opens that table while retaining the active model. **Eject model** in the chooser
+terminates the worker, preserving in-memory chat history
+and the draft. Ejection does not delete downloaded files. The browser/runtime may
+cache model files; clear browser site data to remove those files. This does not make evidence lookups
+offline.
 
 ## Static Prototype
 
