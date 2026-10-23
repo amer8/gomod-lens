@@ -253,7 +253,7 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
     if (value) {
       if (!cacheChecked) void refreshModelCache()
       ;(enabling ? cancelLoading : modelGate.hidden ? input : modelButton.disabled ? grip : modelButton).focus({ preventScroll: true })
-    } else launch.focus({ preventScroll: true })
+    } else if (!launch.hidden) launch.focus({ preventScroll: true })
   }
   let drag = null
   grip.addEventListener('pointerdown', event => {
@@ -465,6 +465,8 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
   updateAI(); reflectLayout(); setBusy()
   return {
     loading() {
+      launch.hidden = true
+      if (opened) toggle(false)
       cancel(); context = null; revision++; cache.clear(); setBusy(); renderStarters(); disableOldActions()
       status.textContent = 'Load a module to continue. Earlier answers retain their original module context.'
     },

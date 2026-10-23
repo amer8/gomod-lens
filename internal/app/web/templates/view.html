@@ -18,6 +18,11 @@
         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m14 5-7 7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
       </button>
       <div id="left-panel" class="left-panel left-panel-empty">
+        <header class="welcome-content welcome-intro">
+          <p class="welcome-brand">go.mod Lens</p>
+          <h1>Explore your Go dependencies.</h1>
+          <p>See how modules connect. Explore security practices, release freshness, known vulnerabilities, and license evidence.</p>
+        </header>
         <div id="navbar-component" class="navbar-component navbar-component-empty">
           <form
             id="search-form"
@@ -33,11 +38,12 @@
                 <input
                   id="module-target"
                   aria-label="Public module"
+                  aria-describedby="module-search-help"
                   name="target"
                   autofocus
                   type="text"
                   class="form-control"
-                  placeholder="Search modules or paste a path.."
+                  placeholder="Search modules or paste a module path"
                   spellcheck="false"
                   autocomplete="off"
                 >
@@ -55,6 +61,25 @@
             <div id="error-message" class="error-message"></div>
           </div>
         </div>
+        <section class="welcome-content welcome-guide" aria-labelledby="example-repos-heading">
+          <p id="module-search-help" class="welcome-search-help">Search by name or use a public Go module path without <code>https://</code>. Add <code>@version</code> to inspect a specific release.</p>
+          <h2 id="example-repos-heading">Try an example</h2>
+          <div class="example-repos">
+            <a class="example-repo" href="#target=github.com%2Fspf13%2Fcobra">
+              <span class="example-repo-info"><span class="example-repo-title">Cobra <span>Command-line applications</span></span><code>github.com/spf13/cobra</code></span>
+              <span class="example-repo-arrow" aria-hidden="true">→</span>
+            </a>
+            <a class="example-repo" href="#target=github.com%2Fgin-gonic%2Fgin">
+              <span class="example-repo-info"><span class="example-repo-title">Gin <span>Web framework</span></span><code>github.com/gin-gonic/gin</code></span>
+              <span class="example-repo-arrow" aria-hidden="true">→</span>
+            </a>
+            <a class="example-repo" href="#target=google.golang.org%2Fgrpc">
+              <span class="example-repo-info"><span class="example-repo-title">gRPC <span>Remote procedure calls</span></span><code>google.golang.org/grpc</code></span>
+              <span class="example-repo-arrow" aria-hidden="true">→</span>
+            </a>
+          </div>
+          <p class="welcome-next">Once the graph loads, select a node to inspect a module. Switch lenses to explore its evidence.</p>
+        </section>
         <div id="graph-result" data-state="empty"></div>
       </div>
       {{template "panelAttribution" .}}

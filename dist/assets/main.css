@@ -207,7 +207,170 @@ pre {
 }
 
 .left-panel-empty {
+    --welcome-top: clamp(16px, calc((100dvh - 720px) / 2), 72px);
+    top: var(--welcome-top);
+    left: 50%;
     bottom: auto;
+    width: min(560px, calc(100vw - 32px));
+    max-height: calc(100dvh - var(--welcome-top) - 16px);
+    transform: translateX(-50%);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    border: 1px solid var(--panel-border-color);
+    border-radius: 18px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.3);
+}
+
+.sidebar-toggle:has(+ .left-panel-empty) {
+    display: none;
+}
+
+.welcome-content {
+    display: none;
+    flex-shrink: 0;
+}
+
+.left-panel-empty .welcome-content {
+    display: block;
+}
+
+.welcome-intro {
+    padding: 24px 28px 22px;
+}
+
+.welcome-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 14px;
+    color: #d5dce8;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.welcome-brand::before {
+    content: '';
+    width: 16px;
+    height: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    background: conic-gradient(#c492e8, #75c4a2, #e8c660, #c492e8);
+}
+
+.welcome-intro h1 {
+    margin: 0 0 12px;
+    max-width: 420px;
+    font-size: 32px;
+    font-weight: 600;
+    line-height: 1.15;
+    letter-spacing: -1px;
+    text-wrap: balance;
+}
+
+.welcome-intro > p:last-child {
+    margin: 0;
+    color: #c3cde0;
+    font-size: 14px;
+    line-height: 1.65;
+}
+
+.left-panel-empty .search {
+    margin: 0 28px 10px;
+}
+
+.left-panel-empty .search input,
+.left-panel-empty .search .btn {
+    min-height: 44px;
+}
+
+.welcome-guide {
+    padding: 0 28px 24px;
+}
+
+.welcome-search-help {
+    margin: 0 0 24px;
+    color: #bac5d9;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+.welcome-guide h2 {
+    margin: 0 0 12px;
+    color: #eff2fa;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.example-repos {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.example-repo {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 13px 16px;
+    color: #eff2fa;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 10px;
+}
+
+.example-repo:hover,
+.example-repo:focus-visible {
+    color: #fff;
+    background: rgba(82, 204, 227, 0.09);
+    border-color: rgba(82, 204, 227, 0.6);
+    text-decoration: none;
+}
+
+.example-repo:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 3px;
+}
+
+.example-repo-info {
+    min-width: 0;
+}
+
+.example-repo-title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 10px;
+    margin-bottom: 5px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.example-repo-title span {
+    color: #bac5d9;
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.example-repo code {
+    display: block;
+    color: #8ed9e8;
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.example-repo-arrow {
+    color: #8ed9e8;
+    font-size: 20px;
+}
+
+.welcome-next {
+    margin: 18px 0 0;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    color: #bac5d9;
+    font-size: 12px;
+    line-height: 1.6;
 }
 
 .navbar-component {
@@ -756,13 +919,17 @@ pre {
     }
 
     .left-panel-empty {
-        top: 0;
-        right: 0;
+        --welcome-top: 16px;
+        top: 16px;
+        right: auto;
         bottom: auto;
-        max-height: 100vh;
-        max-height: 100dvh;
-        box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
+        left: 50%;
+        width: min(560px, calc(100vw - 32px));
+        max-height: calc(100dvh - 32px);
+        border: 1px solid var(--panel-border-color);
     }
+
+    .welcome-next { padding-right: 56px; }
 
     .navbar-component-empty {
         padding-top: 0;
@@ -778,7 +945,6 @@ pre {
         margin: 12px;
     }
 
-    .left-panel-empty .search { margin-left: 60px; }
     .left-panel:not(.left-panel-empty) .infoBox { margin-bottom: max(88px, calc(env(safe-area-inset-bottom) + 76px)); }
     #app .left-panel.analysis-expanded:not(.left-panel-empty) { max-height: calc(100dvh - 76px); }
 
@@ -874,6 +1040,12 @@ pre {
 }
 
 @media (max-width: 480px) {
+    .welcome-intro { padding: 22px 20px 20px; }
+    .welcome-intro h1 { font-size: 30px; }
+    .welcome-guide { padding: 0 20px 22px; }
+    .left-panel-empty .search { margin-left: 20px; margin-right: 20px; }
+    .example-repo { padding: 12px; }
+
     .module-version-control {
         flex-basis: 88px;
     }
