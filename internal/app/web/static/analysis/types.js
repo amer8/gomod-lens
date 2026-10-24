@@ -43,6 +43,7 @@
  * @property {Object<string, any>} state Lens-owned UI state, reset on graph changes.
  * @property {(id: string) => void} select Select a module and rerender the lens.
  * @property {(request: HighlightRequest) => void} highlight
+ * @property {() => void} repaint Reapply colors after changing lens-owned state.
  */
 
 /**
@@ -56,7 +57,7 @@
  * @property {boolean} [selection] Cache results per selected node instead of per
  * graph. Also enables the module picker. Use for repository report lookups.
  * @property {boolean} [modulePicker] Show a picker without loading per selection.
- * @property {(graph: GraphPayload, data: T | {error: string}, selected: string) => Object<string, string>} [colors]
+ * @property {(graph: GraphPayload, data: T | {error: string}, selected: string, state: Object<string, any>) => Object<string, string>} [colors]
  * Node-ID to CSS-color map. Handle missing records/errors with an unknown color.
  * If omitted, graph.js uses its existing Scorecard/Freshness color scheme.
  * @property {(data: T | {error: string}) => string} [status] Source/status caption.

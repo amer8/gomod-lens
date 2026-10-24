@@ -1,6 +1,6 @@
 # Browser analysis views
 
-The Go web UI and static WebAssembly UI share four analysis lenses:
+The Go web UI and static WebAssembly UI share five analysis lenses:
 
 | Lens query | Design | Interaction |
 | --- | --- | --- |
@@ -8,6 +8,7 @@ The Go web UI and static WebAssembly UI share four analysis lenses:
 | `release-freshness` | Update queues | Start with all modules. Select a release gap to filter and highlight matching graph nodes; click it again to show all modules. |
 | `vulnerabilities` | Result groups | Expand matched, no-match and unknown groups; select a module to inspect advisories. |
 | `licenses` | Evidence inventory | Filter the module table and inspect exact-version source expressions. |
+| [`go-requirements`](go-requirements.md) | Toolchain comparison | Compare minimum Go versions with a target toolchain and inspect requirement paths and `go.mod` sources. |
 
 Select a lens with the centered toolbar, or link to it directly:
 
@@ -41,6 +42,7 @@ fixed assertions.
 Scope remains explicit: Scorecard assesses repository snapshots; OSV matches
 module versions without assessing function reachability or exploitability;
 license metadata does not establish compatibility or file-level completeness.
+Go requirements compares declared minimums, not maintenance status.
 
 Validate with `make check`, which includes the browser tests. Use `make test-js`
 for a focused run. For implementation and extension instructions, see the

@@ -113,7 +113,7 @@ test('available-lens questions use the actual registry without module highlights
   const answer = answerQuestion('lenses', context)
   assert.deepEqual(answer.items.map(item => item.label), browserLenses.map(lens => lens.label))
   assert.ok(answer.items.every(item => item.detail))
-  assert.equal(answer.items.length, 4)
+  assert.equal(answer.items.length, browserLenses.length)
   assert.deepEqual(answer.actions, [])
   assert.deepEqual(answer.sources, [])
   const packet = customPacket('Which lens should I use for release freshness?', context)

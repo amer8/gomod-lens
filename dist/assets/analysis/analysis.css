@@ -76,3 +76,24 @@
 /* A transparent bridge keeps the label hoverable while crossing the gap. */
 .lens-name-tooltip::before{content:'';position:absolute;top:-13px;left:0;right:0;height:14px}
 .lens-name-tooltip::after{content:'';position:absolute;top:-5px;left:var(--tooltip-arrow-x);width:8px;height:8px;transform:translateX(-50%) rotate(45deg);background:#181e2d;border-top:1px solid rgba(178,200,227,.3);border-left:1px solid rgba(178,200,227,.3)}
+
+/* Go requirements use categorical version colors and separate target statuses. */
+.lens-circle-go-requirements{background:linear-gradient(135deg,#78cde2,#a3b9ed);color:#182033;font-size:10px;font-weight:700}
+.go-requirement-target{margin:14px 0 8px}
+.go-requirement-target label{display:block;font-size:var(--analysis-secondary-size);color:#c3cde0}
+.go-requirement-target label>div{display:flex;gap:8px;margin-top:6px}
+.go-requirement-target input{min-width:0;flex:1;width:100%;font:inherit;font-size:14px;padding:8px 10px;background:#32394c;color:#eff2fa;border:1px solid rgba(255,255,255,.2);border-radius:6px}
+[data-lens-panel="go-requirements"]>.analysis-selected-name,[data-lens-panel="go-requirements"]:not([aria-busy])>.analysis-status{display:none}
+.go-requirement-summary{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px 0;color:#c3cde0;font-size:var(--analysis-secondary-size)}
+.go-requirement-summary>.analysis-button{font-size:inherit;padding:5px 7px}
+.go-requirement-groups{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.go-requirement-group{display:inline-flex;align-items:center;gap:8px;min-height:34px;padding:5px 8px;font-size:var(--analysis-secondary-size)}
+.go-requirement-group .analysis-badge{padding:1px 4px}
+.go-requirement-group[aria-pressed=true]{border-color:#a4d6fa;background:rgba(164,214,250,.12)}
+.go-requirement-source{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:8px 0}
+[data-lens-panel="go-requirements"] .analysis-disclosure>strong{display:block;margin-top:10px;overflow-wrap:anywhere}
+.go-requirement-version{display:inline-flex;align-items:center;gap:6px}
+.go-requirement-swatch{display:inline-block;flex-shrink:0;width:10px;height:10px;border-radius:50%;box-shadow:0 0 0 1px rgba(255,255,255,.2)}
+.go-requirement-path{padding-left:22px;margin:12px 0}
+.go-requirement-path li{padding:6px 0 6px 4px;color:#a4d6fa}
+@media(pointer:coarse){.go-requirement-target input{font-size:16px;min-height:40px}}

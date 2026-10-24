@@ -4,6 +4,11 @@ import { element, action, notice } from './ui.js'
 import { selectedLens, lensURL } from './navigation.js'
 import { createGraphAssistant } from '../assistant/index.js'
 import { createLensTooltip } from './lens-tooltip.js'
+
+// Shared controller for every browser lens. Individual views belong in the
+// modules listed by registry.js; adding a view does not require editing this file.
+// capture -> choose -> load -> render; stop aborts work when the graph changes.
+// See docs/development/lenses.md for ownership, caching and contribution recipes.
 export function createAnalysisViews({ selectNode, setColors, highlight }) {
   const ready = Promise.all(browserLenses.map(async registration => ({
     ...(await registration.importModule()).default,
@@ -72,7 +77,7 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
   }
   function paint() {
     const data = results.get(active?.key)
-    setColors(active?.colors && data ? active.colors(graph, data, selected) : null)
+    setColors(active?.colors && data ? active.colors(graph, data, selected, states.get(active.key) || {}) : null)
   }
   function select(id) {
     if (!graph?.nodes.some(node => node.id === id)) return
@@ -105,7 +110,9 @@ export function createAnalysisViews({ selectNode, setColors, highlight }) {
       status.textContent = module.status?.(data) || 'Analysis ready'; retry.disabled = false
       if (!states.has(module.key)) states.set(module.key, {})
       const node = graph.nodes.find(n => n.id === selected)
-      host.replaceChildren(); module.render({ host, graph, node, data, select, highlight, state: states.get(module.key) })
+      const renderedGeneration = generation
+      const repaint = () => { if (generation === renderedGeneration && active === module) paint() }
+      host.replaceChildren(); module.render({ host, graph, node, data, select, highlight, state: states.get(module.key), repaint })
       for (const button of host.querySelectorAll('[data-node-id]')) {
         if (button.dataset.nodeId === selected) button.setAttribute('aria-current', 'true')
       }

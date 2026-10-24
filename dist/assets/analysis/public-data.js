@@ -1,14 +1,17 @@
 const memory = new Map()
 export function clearPublicCache() { memory.clear() }
-export async function publicJSON(url, { signal, body, fetcher = fetch } = {}) {
+export function publicJSON(url, options) { return publicData(url, options, 'json') }
+export function publicText(url, options) { return publicData(url, options, 'text') }
+async function publicData(url, { signal, body, fetcher = fetch } = {}, format) {
   signal?.throwIfAborted()
-  const key = url + (body ? JSON.stringify(body) : '')
+  const key = format + ':' + url + (body ? JSON.stringify(body) : '')
   const cached = memory.get(key)
   if (cached && Date.now() - cached.at < 300000) return structuredClone(cached.value)
   const timeout = AbortSignal.timeout(20000)
   const response = await fetcher(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout, credentials: 'omit', ...(body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) })
   if (!response.ok) throw new Error(`Public source returned HTTP ${response.status}`)
-  const value = await response.json()
+  const value = await response[format]()
+  signal?.throwIfAborted()
   if (memory.size >= 1000) memory.delete(memory.keys().next().value)
   memory.set(key, { at: Date.now(), value }); return structuredClone(value)
 }

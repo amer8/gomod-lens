@@ -56,8 +56,8 @@ export function customPacket(question, context, evidence = {}) {
   const facts = reports.map((report, index) => ({
     id: 'E' + (index + 1), investigation: report.topic,
     statements: report.paragraphs.join(' ').slice(0, 700),
-    findings: report.items.slice(0, 4).map(item => ({ module: item.label, detail: item.detail.slice(0, 180) })),
-    omittedFindings: Math.max(0, report.items.length - 4),
+    findings: report.items.slice(0, report.topic === 'lenses' ? report.items.length : 4).map(item => ({ module: item.label, detail: item.detail.slice(0, 180) })),
+    omittedFindings: report.topic === 'lenses' ? 0 : Math.max(0, report.items.length - 4),
     path: report.path?.slice(0, 8), omittedPathSteps: Math.max(0, (report.path?.length || 0) - 8),
     scope: report.scope.slice(0, 300), observedAt: report.observedAt,
   }))

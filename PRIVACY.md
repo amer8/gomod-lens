@@ -1,6 +1,6 @@
 # Privacy and External Services
 
-Last updated: October 21, 2026
+Last updated: October 23, 2026
 
 go.mod Lens is intended for exploring public Go modules. Do not enter private
 module paths, secret repository names, access tokens, or other non-public
@@ -30,6 +30,13 @@ the displayed graph. After a graph loads, the module version selector in both
 the server UI and static UI requests the root module’s version list and latest
 version directly from `proxy.golang.org` in the visitor’s browser. Successful
 version lookups are kept in page memory for up to five minutes.
+
+Opening the Go requirements lens in either UI sends public resolved module
+paths and exact versions to `proxy.golang.org` to read `.mod` files directly
+from the visitor's browser. Public replacements use their resolved identities;
+local replacements and missing versions are not sent. Requests omit credentials
+and use a five-minute page-memory cache cleared by Refresh. The chosen target
+toolchain is compared locally and is not sent to that service.
 
 See the Go modules services privacy policy:
 <https://proxy.golang.org/privacy>

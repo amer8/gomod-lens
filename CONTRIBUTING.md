@@ -50,25 +50,22 @@ used to inspect server files or private workspace state.
 
 ## Adding Lenses
 
-There are two extension layers:
+The [lens contributor guide](docs/development/lenses.md) maps existing lenses
+to their source and tests, explains the browser contract, and covers Go graph
+enrichment. To create a working browser lens with registration and tests:
 
-- **Graph enrichment (Go):** `graph.Lens` implementations attach per-node
-  results with `Node.SetLensResult`. `graph.NewAnalyzer` registers the server's
-  built-in Scorecard and Freshness implementations. The WASM resolver has
-  corresponding enrichment paths under `internal/staticresolver`.
-- **Browser views (JavaScript):** the four interactive lenses share the
-  interface in `internal/app/web/static/analysis/types.js` and are registered in
-  `analysis/registry.js`. Scorecard details, vulnerability matches and license
-  evidence fetch additional data in the browser; Freshness reads the graph.
-  Browser-only results are not added to `/api/graph` responses.
+```bash
+make new-lens NAME=module-overview
+make test-js
+make run
+```
 
-Follow the [lens architecture and contributor walkthrough](docs/development/lenses.md)
-for the contract, a minimal browser lens, registration, Web/WASM asset mirroring,
-and testing. Adding a browser-only view does not require a Go lens. A Go lens
-that needs an interactive browser view also needs a browser registration.
+Edit browser lenses in `internal/app/web/static/analysis/`, then run
+`make sync-lenses` to update their committed static copies. Use Go graph
+enrichment when results also need to appear in `/api/graph`.
 
 Keep a new lens narrowly focused, give it a stable lowercase ID, and document
-any upstream services it calls in `PRIVACY.md` and `THIRD_PARTY_NOTICES.md`.
+any new upstream services in `PRIVACY.md` and `THIRD_PARTY_NOTICES.md`.
 
 ## Before Opening a Pull Request
 

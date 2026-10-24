@@ -10,7 +10,7 @@ GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE)
 GO_PACKAGES := ./...
 GO_SOURCE_DIRS := main.go internal cmd
 
-.PHONY: help cache-dirs run test test-js test-wasm vet vet-wasm fmt fmt-check tidy-check wasm serve check clean
+.PHONY: help cache-dirs run test test-js test-wasm vet vet-wasm fmt fmt-check tidy-check wasm serve check clean new-lens sync-lenses
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -26,6 +26,12 @@ test: cache-dirs ## Run all Go tests with repo-local caches.
 
 test-js: ## Run browser logic, registry and Web/WASM asset parity tests (Node.js 22+).
 	$(NODE) --test tests/*.test.mjs
+
+new-lens: ## Scaffold and register a browser lens: make new-lens NAME=module-overview.
+	$(NODE) tools/lenses.mjs new "$(NAME)"
+
+sync-lenses: ## Copy canonical browser lens assets into the static deployment.
+	$(NODE) tools/lenses.mjs sync
 
 test-wasm: cache-dirs ## Run Go WASM lifecycle tests in Node.js.
 	GOOS=js GOARCH=wasm $(GO_ENV) $(GO) test -exec="$$($(GO) env GOROOT)/lib/wasm/go_js_wasm_exec" ./cmd/wasm

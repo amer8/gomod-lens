@@ -4,8 +4,8 @@
 
 `gomod-lens` explores public Go module dependency graphs in a browser. It can
 run as a Go web server or as a static WebAssembly build, and analyzes modules
-through four browser lenses: OpenSSF Scorecard, Release Freshness,
-Vulnerability exposure and License evidence.
+through five browser lenses: OpenSSF Scorecard, Release Freshness,
+Vulnerability exposure, License evidence and Go requirements.
 
 Deployed to GitHub Pages: https://amer8.github.io/gomod-lens/
 
@@ -22,13 +22,16 @@ OpenSSF Scorecard highlights repository security practices. Release Freshness
 shows whether selected versions are current, patch/minor/major behind,
 pre-release, pseudo-version, or unknown. Vulnerability exposure matches exact
 module versions against OSV advisories. License evidence displays expressions
-observed by deps.dev for exact module versions.
+observed by deps.dev for exact module versions. Go requirements reads each
+exact version's `go.mod`, groups declared minimum Go versions, and compares
+them with a chosen target toolchain. Older minimums are compatibility baselines,
+not maintenance or security scores. See the
+[Go requirements guide](docs/features/go-requirements.md).
 
 Go graph enrichment supplies Scorecard summaries and release freshness in the
-graph payload. The browser adds Scorecard check details, vulnerability matches
-and license evidence when those views are opened. These browser observations
-are not included in `/api/graph`. Both layers can be extended; see the
-[lens developer guide](docs/development/lenses.md).
+graph payload. The browser adds Scorecard check details, vulnerability matches,
+license evidence and Go requirements when those views are opened. These browser
+observations are not included in `/api/graph`.
 
 The **Graph assistant** adds a collapsible chat dock with three contextual
 starter questions and three follow-ups after each answer. It connects answers
@@ -49,10 +52,10 @@ postdate the selected module release.
 
 ## Development
 
-The four browser lenses use Repository on graph (Scorecard), Update queues
-(Freshness), Result groups (vulnerabilities), and Evidence inventory (licenses).
-They work in both the Go web UI and static WASM build. See the
-[analysis views and reproduction steps](docs/features/analysis-views.md).
+To change or add a lens, start with the
+[lens contributor guide](docs/development/lenses.md) and its
+`make new-lens NAME=module-overview` starter. See the
+[analysis views](docs/features/analysis-views.md) for UI reproduction steps.
 
 Run `make help` for the full target list.
 

@@ -264,7 +264,7 @@ export function setGraphLens(lensID) {
 
 export function applyHighlightRequest(request) {
   const ids = request?.ids || []
-  if (ids.length === 1) {
+  if (ids.length === 1 && !request?.nodesOnly) {
     selectNode(ids[0])
     return
   }
