@@ -68,6 +68,12 @@ then rebuild with `make wasm` or preview with `make serve` (port 4173).
 `make run` is an alias for the same static preview. Existing HTTP API consumers
 must migrate; `/api/graph`, `/api/modules/search` and `/api/health` are removed.
 
+Graph rendering uses native Canvas for small graphs and WebGPU for graphs with
+at least 500 modules or 2,000 edges, with automatic Canvas fallback when a GPU
+is unavailable or lost. The CPU force layout still uses `ngraph.forcelayout`;
+graph storage and rendering have no ngraph dependency. See the
+[renderer benchmark and reproduction guide](docs/development/graph-rendering.md).
+
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
 
 ## Privacy

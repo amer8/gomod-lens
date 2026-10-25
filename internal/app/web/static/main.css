@@ -815,6 +815,10 @@ pre {
     display: block;
 }
 
+.graphView { touch-action: none; }
+.graphView .graph-layer { position: absolute; inset: 0; }
+.graphView .graph-labels { pointer-events: none; }
+
 @keyframes star-drift {
     from {
         background-position: 0 0, 0 0, 0 0, 0 0;

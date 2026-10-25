@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Graph renderer benchmark</title><link rel="icon" href="data:,">
+<style>
+html,body{margin:0;background:#080c19;color:#fff;font:14px system-ui}#graph{position:relative;width:100vw;height:100vh;overflow:hidden;touch-action:none}
+.graphView canvas,.graphView svg{position:relative;display:block;width:100%;height:100%}
+.graphView .graph-layer{position:absolute;inset:0}.graph-labels{pointer-events:none}
+</style></head><body><div id="graph"></div><script type="module">
+import { createGraphModel } from '/internal/app/web/static/graph-model.js'
+import { createGraphLayout } from '/internal/app/web/static/graph-layout.js'
+import { createGraphScene, fitCamera } from '/internal/app/web/static/graph-scene.js'
+import { makeFixture } from './fixture.js'
+const container = document.getElementById('graph')
+const nextFrame = () => new Promise(requestAnimationFrame)
+const percentile = (data, p) => [...data].sort((a,b) => a-b)[Math.min(data.length - 1, Math.floor(data.length * p))]
+let active = null, prepared = null
+window.benchmark = {
+  async prepare(count, payload = makeFixture(count)) {
+    active?.dispose(); active = null
+    const start = performance.now(), model = createGraphModel(payload), modelMs = performance.now() - start
+    const layoutStart = performance.now(), layout = createGraphLayout(model)
+    for (let i = 0; i < 300; i++) layout.step()
+    layout.finish(); layout.dispose()
+    prepared = { payload, positions: [...model.positions], modelMs, layoutMs: performance.now() - layoutStart }
+    return { nodes: model.nodes.length, edges: model.links.length, modelMs, layoutMs: prepared.layoutMs }
+  },
+  async setup(mode) {
+    active?.dispose(); active = null; container.replaceChildren(); container.className = 'graphView'
+    const start = performance.now()
+    if (mode === 'legacy') {
+      const legacy = await import('./legacy-graph.js')
+      legacy.renderGraph(container, prepared.payload)
+      active = await legacy.prepareBenchmark(prepared.positions)
+    } else {
+      const model = createGraphModel(prepared.payload); model.setPositions(prepared.positions)
+      const scene = createGraphScene(container, model, { renderer: mode })
+      await scene.ready
+      if (scene.renderer !== mode) throw new Error(`${mode} unavailable: ${scene.fallbackReason}`)
+      active = { draw(camera) { scene.setCamera(camera); scene.draw() }, select(id) { model.select(id) }, dispose: () => scene.dispose(), flush: () => scene.flush(), scene }
+    }
+    const initializationMs = performance.now() - start
+    await nextFrame(); await nextFrame()
+    return { initializationMs, adapter: active.scene?.adapterInfo, renderer: mode }
+  },
+  async run(frames = 90, warmup = 30) {
+    const { width, height } = container.getBoundingClientRect()
+    const base = fitCamera(prepared.positions, width, height), work = [], intervals = []
+    let last = null
+    for (let i = -warmup; i < frames; i++) {
+      const timestamp = await nextFrame(), phase = (i + warmup) / 60
+      if (i >= 0 && last !== null) intervals.push(timestamp - last)
+      last = timestamp
+      const factor = 1 + 2 * (0.5 + 0.5 * Math.sin(phase)), scale = base.scale * factor
+      const camera = { scale, x: width / 2 + (base.x - width / 2) * factor + Math.sin(phase * 2) * 75, y: height / 2 + (base.y - height / 2) * factor + Math.cos(phase) * 40 }
+      const start = performance.now()
+      if (i % 30 === 0) active.select(i % 60 === 0 ? prepared.payload.nodes[Math.floor(prepared.payload.nodes.length / 2)].id : '')
+      active.draw(camera)
+      if (i >= 0) work.push(performance.now() - start)
+    }
+    const drain = performance.now(); await active.flush()
+    return { drawMedianMs: percentile(work, .5), drawP95Ms: percentile(work, .95), frameMedianMs: percentile(intervals, .5), frameP95Ms: percentile(intervals, .95), over25Ms: intervals.filter(x => x > 25).length, frames, drainMs: performance.now() - drain }
+  },
+  async liveLayout(mode, count, frames = 120) {
+    active?.dispose(); active = null; container.replaceChildren(); container.className = 'graphView'
+    const payload = makeFixture(count), intervals = []
+    const module = await import(mode === 'legacy' ? './legacy-graph.js' : '/internal/app/web/static/graph.js')
+    const start = performance.now()
+    const ready = module.renderGraph(container, payload, { renderer: mode })
+    active = { dispose: () => module.disposeGraph() }
+    await ready
+    const initializationMs = performance.now() - start
+    let previous = await nextFrame()
+    for (let i = 0; i < frames; i++) {
+      const timestamp = await nextFrame(); intervals.push(timestamp - previous); previous = timestamp
+    }
+    const renderer = mode === 'legacy' ? 'legacy' : container.dataset.graphRenderer
+    active.dispose(); active = null
+    return { mode, nodes: count, edges: payload.edges.length, frames, renderer, initializationMs, frameMedianMs: percentile(intervals, .5), frameP95Ms: percentile(intervals, .95), over25Ms: intervals.filter(x => x > 25).length }
+  },
+  get scene() { return active?.scene },
+  get payload() { return prepared?.payload },
+}
+window.ready = true
+</script></body></html>

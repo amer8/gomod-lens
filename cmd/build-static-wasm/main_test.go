@@ -52,7 +52,7 @@ func TestSyncAssetsBuildsFromCanonicalSourcesAndRemovesObsoleteOutputs(t *testin
 	if string(body) != string(index) {
 		t.Fatal("static build changed the canonical HTML shell")
 	}
-	for _, want := range []string{`src="./assets/app.js"`, `src="./assets/wasm_exec.js"`, `href="./assets/main.css"`, `./assets/analysis/analysis.css`, `./assets/assistant/assistant.css`, `./assets/vendor/ngraph.graph.js`, `id="lens-toolbar" aria-label="Lens selection" hidden`, `id="sidebar-toggle"`, `class="panel-intro">`, `aria-label="Project information"`, `src="./assets/gopher-63.svg"`, `aria-label="Contribute to gomod-lens on GitHub"`} {
+	for _, want := range []string{`src="./assets/app.js"`, `src="./assets/wasm_exec.js"`, `href="./assets/main.css"`, `./assets/analysis/analysis.css`, `./assets/assistant/assistant.css`, `id="lens-toolbar" aria-label="Lens selection" hidden`, `id="sidebar-toggle"`, `class="panel-intro">`, `aria-label="Project information"`, `src="./assets/gopher-63.svg"`, `aria-label="Contribute to gomod-lens on GitHub"`} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("static page missing %q", want)
 		}

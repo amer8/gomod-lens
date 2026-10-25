@@ -13,19 +13,24 @@ This module currently has no third-party Go dependencies.
 
 | Package | Version | License | Use |
 | --- | --- | --- | --- |
-| `ngraph.graph` | `20.1.1` | BSD-3-Clause | Self-hosted for graph data structures |
 | `ngraph.forcelayout` | `3.3.1` | BSD-3-Clause | Self-hosted for force-directed graph layout |
-| `ngraph.svg` | `0.11.0` | MIT | Self-hosted for graph rendering |
-| `ngraph.events` | `1.4.0`, `1.2.2` | BSD-3-Clause | Transitive event helpers for `ngraph.graph` and `ngraph.forcelayout` |
+| `ngraph.events` | `1.2.2` | BSD-3-Clause | Transitive event helper for `ngraph.forcelayout` |
 | `ngraph.merge` | `1.0.0` | MIT | Transitive option-merge helper for `ngraph.forcelayout` |
 | `ngraph.random` | `1.1.0` | BSD-3-Clause | Transitive random-number helper for `ngraph.forcelayout` |
-| `rbush` | `3.0.1` | MIT | Transitive spatial index used by `ngraph.svg` |
-| `quickselect` | `2.0.0` | ISC | Transitive selection helper used by `rbush` |
 | Go WebAssembly runtime (`wasm_exec.js`) | Go toolchain version from `go.mod`/CI | BSD-style Go license | Copied into the GitHub Pages artifact to bootstrap the static WASM resolver |
 
 Full upstream notices for vendored browser runtime files are copied into
 `internal/app/web/static/vendor/LICENSES.txt`. The Pages artifact receives a
 generated copy at `dist/assets/vendor/LICENSES.txt`.
+
+The original renderer is retained only under `tools/graph-benchmark/legacy`
+for reproducible comparisons. Its additional dependencies are `ngraph.graph`
+20.1.1 (BSD-3-Clause), `ngraph.svg` 0.11.0 (MIT), `ngraph.events` 1.4.0
+(BSD-3-Clause), `rbush` 3.0.1 (MIT), and `quickselect` 2.0.0 (ISC).
+Their full notices remain in `tools/graph-benchmark/legacy/LICENSES.txt`.
+These benchmark files are excluded from the static deployment. The app's graph
+storage, WebGPU renderer, Canvas fallback, labels, and interaction code use
+native browser APIs.
 
 ## Graph assistant local AI
 

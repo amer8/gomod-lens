@@ -6,14 +6,14 @@ specifiers were rewritten to sibling files in this directory.
 
 Packages:
 
-- ngraph.graph 20.1.1, BSD-3-Clause
 - ngraph.forcelayout 3.3.1, BSD-3-Clause
-- ngraph.svg 0.11.0, MIT
-- ngraph.events 1.4.0 and 1.2.2, BSD-3-Clause
+- ngraph.events 1.2.2, BSD-3-Clause
 - ngraph.merge 1.0.0, MIT
 - ngraph.random 1.1.0, BSD-3-Clause
-- rbush 3.0.1, MIT
-- quickselect 2.0.0, ISC
+
+The additional notices below cover the frozen development benchmark in
+tools/graph-benchmark/legacy (ngraph.graph, ngraph.svg, ngraph.events 1.4.0,
+rbush, quickselect). These files are not included in the static deployment.
 
 ngraph.graph 20.1.1
 -------------------
