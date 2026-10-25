@@ -1,7 +1,6 @@
 import createLayout from './vendor/ngraph.forcelayout.js'
 
-// Keep the existing force solver and parameters while measuring the renderer.
-// This is the only ngraph component used by the application.
+// The force solver publishes positions to the native renderers and pins the root.
 export function createGraphLayout(model) {
   const size = id => 10 + model.byID.get(id).dependencyScale * 18
   const layout = createLayout(model.graph, {

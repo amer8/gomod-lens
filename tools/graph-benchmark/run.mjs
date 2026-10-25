@@ -59,7 +59,7 @@ try {
     const fixture = await page.evaluate(({ nodes, payload }) => window.benchmark.prepare(nodes, payload), { nodes, payload: livePayload })
     const repetitions = smoke ? 1 : 3
     for (let trial = 0; trial < repetitions; trial++) {
-      const modes = ['legacy', 'canvas', 'webgpu']; modes.push(...modes.splice(0, trial % 3))
+      const modes = ['canvas', 'webgpu']; modes.push(...modes.splice(0, trial % modes.length))
       for (const mode of modes) {
         const setup = await page.evaluate(m => window.benchmark.setup(m), mode)
         const before = (await session.send('Performance.getMetrics')).metrics
@@ -73,7 +73,7 @@ try {
     }
   }
   if (layoutOnly) for (let trial = 0; trial < 3; trial++) {
-    const modes = ['legacy', 'canvas', 'webgpu']; modes.push(...modes.splice(0, trial))
+    const modes = ['canvas', 'webgpu']; modes.push(...modes.splice(0, trial % modes.length))
     for (const mode of modes) {
       const before = (await session.send('Performance.getMetrics')).metrics
       const result = await page.evaluate(mode => window.benchmark.liveLayout(mode, 1500), mode)

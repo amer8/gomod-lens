@@ -35,8 +35,7 @@ export function createCanvasRenderer(canvas, model) {
   }
 }
 
-// Both renderers use the same text overlay, including collision suppression,
-// so benchmarking does not credit WebGPU for omitting readable module labels.
+// Both renderers share readable labels, collision suppression and zoom detail.
 export function createGraphLabels(canvas, model) {
   const ctx = canvas.getContext('2d'), hits = [], widths = new Map()
   const ranked = [...model.nodes].sort((a, b) => b.importance - a.importance || a.index - b.index)

@@ -4,9 +4,6 @@ import { createGraphModel, lensColor } from '../internal/app/web/static/graph-mo
 import { createGraphLayout } from '../internal/app/web/static/graph-layout.js'
 import { fitCamera, shouldUseWebGPU } from '../internal/app/web/static/graph-scene.js'
 import { createWebGPURenderer } from '../internal/app/web/static/graph-webgpu.js'
-import createLegacyGraph from '../tools/graph-benchmark/legacy/ngraph.graph.js'
-import { ForceLayoutAdapter } from '../tools/graph-benchmark/legacy/ngraph.svg.js'
-import { makeFixture } from '../tools/graph-benchmark/fixture.js'
 
 const payload = () => ({
   rootId: 'root', nodes: ['root', 'a', 'b', 'c', 'isolated'].map(id => ({ id, root: id === 'root', lenses: { openssf: { status: 'found', score: 9 } } })),
@@ -81,26 +78,15 @@ test('automatic rendering avoids GPU startup for small graphs and honors explici
   assert.equal(shouldUseWebGPU('webgpu', 10, 20), true)
 })
 
-test('retained layout produces the same positions as the original solver and pins the root', async () => {
-  const data = makeFixture(40), model = createGraphModel(data), next = createGraphLayout(model)
-  const graph = createLegacyGraph()
-  for (const node of data.nodes) graph.addNode(node.id, node)
-  for (const edge of data.edges) graph.addLink(edge.source, edge.target, edge)
-  const old = new ForceLayoutAdapter(graph, {
-    springLength: 80, springCoefficient: 0.0002, gravity: -1.15, dragCoefficient: 0.03,
-    layeredLayout: false, getNodeSize: id => 10 + model.byID.get(id).dependencyScale * 18,
-  })
+test('force layout keeps the root pinned and finite positions for cyclic and disconnected nodes', () => {
+  const model = createGraphModel(payload()), layout = createGraphLayout(model)
   try {
-    await old.setNodePosition(data.rootId, 0, 0); await old.pinNode(data.rootId)
-    for (let i = 0; i < 80; i++) { next.step(); await old.step() }
-    next.finish()
+    for (let i = 0; i < 80; i++) layout.step()
+    layout.finish()
     assert.equal(model.positions[0], 0); assert.equal(model.positions[1], 0)
-    for (const node of model.nodes) {
-      const reference = await old.getNodePosition(node.id)
-      assert(Math.abs(model.positions[node.index * 2] - reference.x) < 0.001)
-      assert(Math.abs(model.positions[node.index * 2 + 1] - reference.y) < 0.001)
-    }
-  } finally { old.dispose(); next.dispose() }
+    assert(model.positions.every(Number.isFinite))
+    assert(model.nodes.slice(1).every(node => Math.hypot(model.positions[node.index * 2], model.positions[node.index * 2 + 1]) > 0))
+  } finally { layout.dispose() }
 })
 
 test('WebGPU rejects unavailable or refused adapters before allocating a device', async () => {

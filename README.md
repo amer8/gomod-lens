@@ -72,7 +72,7 @@ Graph rendering uses native Canvas for small graphs and WebGPU for graphs with
 at least 500 modules or 2,000 edges, with automatic Canvas fallback when a GPU
 is unavailable or lost. The CPU force layout still uses `ngraph.forcelayout`;
 graph storage and rendering have no ngraph dependency. See the
-[renderer benchmark and reproduction guide](docs/development/graph-rendering.md).
+[renderer verification and benchmark guide](docs/development/graph-rendering.md).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
 

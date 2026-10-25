@@ -23,14 +23,9 @@ Full upstream notices for vendored browser runtime files are copied into
 `internal/app/web/static/vendor/LICENSES.txt`. The Pages artifact receives a
 generated copy at `dist/assets/vendor/LICENSES.txt`.
 
-The original renderer is retained only under `tools/graph-benchmark/legacy`
-for reproducible comparisons. Its additional dependencies are `ngraph.graph`
-20.1.1 (BSD-3-Clause), `ngraph.svg` 0.11.0 (MIT), `ngraph.events` 1.4.0
-(BSD-3-Clause), `rbush` 3.0.1 (MIT), and `quickselect` 2.0.0 (ISC).
-Their full notices remain in `tools/graph-benchmark/legacy/LICENSES.txt`.
-These benchmark files are excluded from the static deployment. The app's graph
-storage, WebGPU renderer, Canvas fallback, labels, and interaction code use
-native browser APIs.
+The app's graph storage, WebGPU renderer, Canvas fallback, labels, and
+interaction code use native browser APIs. The development renderer benchmark
+uses these same runtime files and adds no graph dependencies.
 
 ## Graph assistant local AI
 
