@@ -1,12 +1,14 @@
 let runtimeReady = null
 let runtimeRun = null
 
-export async function resolveGraph(target, options = {}) {
+export async function loadGraph(target, options = {}) {
   await ensureRuntime()
-  return withAbort(window.gomodLensResolveGraph(String(target || ''), {
+  const payload = await withAbort(window.gomodLensResolveGraph(String(target || ''), {
     signal: options.signal,
     onProgress: options.onProgress,
   }), options.signal)
+  options.signal?.throwIfAborted()
+  return payload
 }
 
 export async function searchModules(query, limit = 6, signal = undefined) {

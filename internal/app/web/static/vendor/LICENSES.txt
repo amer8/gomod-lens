@@ -6,7 +6,6 @@ specifiers were rewritten to sibling files in this directory.
 
 Packages:
 
-- htmx.org 2.0.8, 0BSD
 - ngraph.graph 20.1.1, BSD-3-Clause
 - ngraph.forcelayout 3.3.1, BSD-3-Clause
 - ngraph.svg 0.11.0, MIT
@@ -15,22 +14,6 @@ Packages:
 - ngraph.random 1.1.0, BSD-3-Clause
 - rbush 3.0.1, MIT
 - quickselect 2.0.0, ISC
-
-htmx.org 2.0.8
-----------------
-
-Zero-Clause BSD
-
-Permission to use, copy, modify, and/or distribute this software for
-any purpose with or without fee is hereby granted.
-
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
-WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES
-OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE
-FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY
-DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN
-AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
-OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 ngraph.graph 20.1.1
 -------------------

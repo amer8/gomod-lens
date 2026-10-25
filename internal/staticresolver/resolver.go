@@ -5,24 +5,24 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	goversion "go/version"
 	"net/url"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/amer8/gomod-lens/internal/graph"
+	"github.com/amer8/gomod-lens/internal/modulesearch"
 )
 
 const (
-	moduleMode                      = "module"
-	proxyBaseURL                    = "https://proxy.golang.org"
-	depsDevBaseURL                  = "https://api.deps.dev/v3"
-	githubSearchURL                 = "https://api.github.com/search/repositories"
-	defaultModuleSearchLimit        = 6
-	githubModuleSearchCandidateSize = 25
-	maxSelectedModules              = 1500
-	moduleLoadConcurrency           = 8
-	scoreLoadConcurrency            = 5
+	moduleMode            = "module"
+	proxyBaseURL          = "https://proxy.golang.org"
+	depsDevBaseURL        = "https://api.deps.dev/v3"
+	githubSearchURL       = "https://api.github.com/search/repositories"
+	maxSelectedModules    = 1500
+	moduleLoadConcurrency = 8
+	scoreLoadConcurrency  = 5
 )
 
 // Resolver builds module dependency graphs using browser-provided fetches.
@@ -154,42 +154,12 @@ func (r *Resolver) SearchModules(ctx context.Context, query string, limit int) (
 	if query == "" {
 		return nil, nil
 	}
-	if limit <= 0 || limit > defaultModuleSearchLimit {
-		limit = defaultModuleSearchLimit
-	}
-
-	candidateLimit := max(limit, githubModuleSearchCandidateSize)
-	values := url.Values{}
-	values.Set("q", githubRepositorySearchQuery(query))
-	values.Set("sort", "stars")
-	values.Set("order", "desc")
-	values.Set("per_page", fmt.Sprintf("%d", candidateLimit))
-
-	var payload githubRepositorySearchResponse
-	if err := r.fetchJSON(ctx, githubSearchURL+"?"+values.Encode(), "application/vnd.github+json", &payload); err != nil {
+	var payload modulesearch.GitHubResponse
+	if err := r.fetchJSON(ctx, githubSearchURL+"?"+modulesearch.GitHubQuery(query).Encode(), "application/vnd.github+json", &payload); err != nil {
 		return nil, err
 	}
 
-	results := make([]ModuleSearchResult, 0, len(payload.Items))
-	for _, item := range payload.Items {
-		fullName := strings.TrimSpace(item.FullName)
-		if fullName == "" || item.Archived {
-			continue
-		}
-		results = append(results, ModuleSearchResult{
-			Path:        "github.com/" + fullName,
-			Repository:  fullName,
-			URL:         item.HTMLURL,
-			Description: strings.TrimSpace(item.Description),
-			Stars:       item.Stars,
-		})
-	}
-
-	sortModuleSearchResults(results, query)
-	if len(results) > limit {
-		results = results[:limit]
-	}
-	return results, nil
+	return payload.Results(query, limit), nil
 }
 
 func (r *Resolver) resolveRequestedTarget(ctx context.Context, target string) (requestedTarget, error) {
@@ -660,44 +630,17 @@ func markLoadMode(loadModes map[string]loadCandidate, requirement requirement, p
 }
 
 func pruningForGoDirective(version string) modulePruning {
-	major, minor, ok := parseGoDirectiveVersion(version)
-	if !ok || major < 1 || (major == 1 && minor < 17) {
+	version = strings.TrimSpace(version)
+	// Unlike toolchain names, go directives need a minor version, end in a
+	// digit, and cannot carry a custom suffix. Check before indexing the end.
+	if !strings.Contains(version, ".") || strings.Contains(version, "-") ||
+		version[len(version)-1] < '0' || version[len(version)-1] > '9' {
+		return pruningUnpruned
+	}
+	if goversion.Compare(goversion.Lang("go"+version), "go1.17") < 0 {
 		return pruningUnpruned
 	}
 	return pruningPruned
-}
-
-func parseGoDirectiveVersion(version string) (int, int, bool) {
-	parts := strings.Split(strings.TrimSpace(version), ".")
-	if len(parts) < 2 {
-		return 0, 0, false
-	}
-	major, ok := parseLeadingNumber(parts[0])
-	if !ok {
-		return 0, 0, false
-	}
-	minor, ok := parseLeadingNumber(parts[1])
-	if !ok {
-		return 0, 0, false
-	}
-	return major, minor, true
-}
-
-func parseLeadingNumber(value string) (int, bool) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		return 0, false
-	}
-	result := 0
-	seen := false
-	for _, char := range value {
-		if char < '0' || char > '9' {
-			break
-		}
-		seen = true
-		result = result*10 + int(char-'0')
-	}
-	return result, seen
 }
 
 func filterPseudoModules(entries []moduleRef) []moduleRef {
@@ -896,44 +839,6 @@ func proxyPathEscape(value string) string {
 	return url.PathEscape(escaped.String())
 }
 
-func githubRepositorySearchQuery(query string) string {
-	if strings.Contains(query, "/") {
-		return query + " in:name,description language:Go"
-	}
-	return query + " in:name,description,readme language:Go"
-}
-
-func sortModuleSearchResults(results []ModuleSearchResult, query string) {
-	query = strings.ToLower(strings.TrimSpace(query))
-	sort.SliceStable(results, func(i, j int) bool {
-		left := moduleSearchRank(results[i], query)
-		right := moduleSearchRank(results[j], query)
-		if left != right {
-			return left < right
-		}
-		return results[i].Stars > results[j].Stars
-	})
-}
-
-func moduleSearchRank(result ModuleSearchResult, query string) int {
-	repository := strings.ToLower(result.Repository)
-	name := repository
-	if slash := strings.LastIndex(repository, "/"); slash >= 0 {
-		name = repository[slash+1:]
-	}
-
-	switch {
-	case name == query:
-		return 0
-	case repository == query:
-		return 1
-	case strings.Contains(repository, query):
-		return 2
-	default:
-		return 3
-	}
-}
-
 func mapLimit[T any](ctx context.Context, items []T, limit int, worker func(index int, item T) error) error {
 	if len(items) == 0 {
 		return nil
@@ -988,18 +893,6 @@ sendJobs:
 		return firstErr
 	}
 	return ctx.Err()
-}
-
-type githubRepositorySearchResponse struct {
-	Items []githubRepositorySearchItem `json:"items"`
-}
-
-type githubRepositorySearchItem struct {
-	FullName    string `json:"full_name"`
-	HTMLURL     string `json:"html_url"`
-	Description string `json:"description"`
-	Stars       int    `json:"stargazers_count"`
-	Archived    bool   `json:"archived"`
 }
 
 type progressReporter struct {

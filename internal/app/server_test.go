@@ -2,17 +2,20 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/amer8/gomod-lens/internal/graph"
+	"github.com/amer8/gomod-lens/internal/graphview"
 )
 
 func TestGraphEndpointReturnsJSON(t *testing.T) {
@@ -27,7 +30,7 @@ func TestGraphEndpointReturnsJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer() error = %v", err)
 	}
-	server.graphCache.set(graphCacheKey("example.com/demo"), &graph.Graph{
+	g := graph.Graph{
 		RootID: "example.com/demo",
 		Nodes: []graph.Node{{
 			ID:      "example.com/demo",
@@ -44,7 +47,8 @@ func TestGraphEndpointReturnsJSON(t *testing.T) {
 			Overlay: graph.OverlayOpenSSF,
 			Lenses:  []graph.LensDefinition{graph.OpenSSFLensDefinition()},
 		},
-	})
+	}
+	server.graphCache.set(graphCacheKey("example.com/demo"), &g)
 
 	request := httptest.NewRequest(http.MethodGet, "/api/graph?target=example.com/demo", nil)
 	response := httptest.NewRecorder()
@@ -64,6 +68,16 @@ func TestGraphEndpointReturnsJSON(t *testing.T) {
 	}
 	if !strings.Contains(response.Body.String(), `"lenses"`) {
 		t.Fatalf("expected lens data in body: %s", response.Body.String())
+	}
+	var payload graphview.Response
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(payload.Graph, g) {
+		t.Fatalf("graph fields changed: got %+v, want %+v", payload.Graph, g)
+	}
+	if !reflect.DeepEqual(payload.ViewModel, graphview.New(g)) {
+		t.Fatalf("sidebar differs from the WASM response model: %+v", payload.ViewModel)
 	}
 }
 
@@ -188,7 +202,6 @@ func TestIndexServesTemplShell(t *testing.T) {
 	for _, want := range []string{
 		`/assets/app.js`,
 		`ngraph.forcelayout`,
-		`/assets/vendor/htmx.min.js`,
 		`/assets/vendor/ngraph.forcelayout.js`,
 	} {
 		if !strings.Contains(body, want) {
@@ -215,7 +228,7 @@ func TestStaticAssetsEndpoint(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d", response.Code)
 	}
-	if !strings.Contains(response.Body.String(), "htmx.ajax") {
+	if !strings.Contains(response.Body.String(), "createApplication") {
 		t.Fatalf("unexpected asset body: %s", response.Body.String())
 	}
 }
@@ -235,7 +248,6 @@ func TestStaticVendorAssetsEndpoint(t *testing.T) {
 		path string
 		want string
 	}{
-		{path: "/assets/vendor/htmx.min.js", want: `version:"2.0.8"`},
 		{path: "/assets/vendor/ngraph.graph.js", want: `./ngraph.events-1.4.0.js`},
 		{path: "/assets/vendor/ngraph.svg.js", want: `./ngraph.forcelayout.js`},
 	} {
@@ -248,30 +260,6 @@ func TestStaticVendorAssetsEndpoint(t *testing.T) {
 		if !strings.Contains(response.Body.String(), tc.want) {
 			t.Fatalf("%s body missing %q: %s", tc.path, tc.want, response.Body.String())
 		}
-	}
-}
-
-func TestGraphFragmentReturnsErrorForMissingTarget(t *testing.T) {
-	t.Parallel()
-
-	server, err := NewServer(graph.NewAnalyzer(fakeRunner(func(context.Context, string, []string, string, ...string) ([]byte, error) {
-		t.Fatalf("runner should not be invoked for missing targets")
-		return nil, nil
-	})))
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
-
-	request := httptest.NewRequest(http.MethodGet, "/graph", nil)
-	response := httptest.NewRecorder()
-	server.Routes().ServeHTTP(response, request)
-
-	if response.Code != http.StatusOK {
-		t.Fatalf("status = %d", response.Code)
-	}
-	body := response.Body.String()
-	if !strings.Contains(body, `data-state="error"`) || !strings.Contains(body, `target is required`) {
-		t.Fatalf("unexpected body: %s", body)
 	}
 }
 

@@ -41,7 +41,8 @@ jobs:
           test -f dist/index.html
           test -f dist/assets/gomod-lens.wasm
           test -f dist/assets/wasm_exec.js
-          test -f dist/assets/vendor/htmx.min.js
+          test -f dist/assets/app.js
+          test -f dist/assets/wasm-client.js
           test -f dist/assets/vendor/ngraph.forcelayout.js
 
       - name: Upload Pages artifact

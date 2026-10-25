@@ -60,7 +60,12 @@ To change or add a lens, start with the
 Run `make help` for the full target list.
 
 Development requires Go 1.26+ and Node.js 22+ for tests, without an npm build.
-`make check` runs Go/WASM checks and the browser logic and asset parity tests.
+`make check` builds the static deployment and runs Go/WASM and browser tests.
+
+Both deployments share one JavaScript controller, sidebar renderer and Go page
+template. The server client fetches JSON from `/api/graph`; the static client
+resolves the same graph and sidebar response with WASM. `dist/` is generated and ignored; edit browser sources in
+`internal/app/web/static/` and rebuild with `make wasm` or `make serve`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
 

@@ -1,13 +1,14 @@
 {{define "index"}}<!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-runtime="{{.Runtime}}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="user-scalable=no, width=device-width, initial-scale=1, maximum-scale=1">
     <title>go.mod Lens</title>
     <meta name="description" content="Visualization of Go module dependencies inspired by npm.anvaka.com">
-    <link rel="stylesheet" href="/assets/main.css">
-    <link rel="stylesheet" href="/assets/analysis/analysis.css">
-    <link rel="stylesheet" href="/assets/assistant/assistant.css">
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="{{.AssetsPrefix}}main.css">
+    <link rel="stylesheet" href="{{.AssetsPrefix}}analysis/analysis.css">
+    <link rel="stylesheet" href="{{.AssetsPrefix}}assistant/assistant.css">
     {{.ImportMapScript}}
   </head>
   <body>
@@ -24,15 +25,7 @@
           <p>See how modules connect. Explore security practices, release freshness, known vulnerabilities, and license evidence.</p>
         </header>
         <div id="navbar-component" class="navbar-component navbar-component-empty">
-          <form
-            id="search-form"
-            class="search"
-            role="search"
-            hx-get="/graph"
-            hx-target="#graph-result"
-            hx-swap="outerHTML"
-            hx-trigger="gomod-lens:manual"
-          >
+          <form id="search-form" class="search" role="search">
             <div class="control-stack">
               <div class="input-group">
                 <input
@@ -54,7 +47,7 @@
             </div>
           </form>
           <div id="graph-progress" class="graph-progress compact" hidden>
-            <h4>Resolving graph <span id="loading-progress">0</span>%..</h4>
+            <h4>Resolving graph<span id="loading-progress"></span>..</h4>
           </div>
           <div id="graph-errors" class="graph-errors compact" hidden>
             <h4>Graph build failed</h4>
@@ -84,23 +77,16 @@
       </div>
       {{template "panelAttribution" .}}
     </div>
-    <script src="{{.HtmxURL}}"></script>
-    <script type="module" src="/assets/app.js"></script>
+    {{if eq .Runtime "wasm"}}<script src="{{.AssetsPrefix}}wasm_exec.js"></script>{{end}}
+    <script type="module" src="{{.AssetsPrefix}}app.js"></script>
   </body>
 </html>{{end}}
-
-{{define "graphFragment"}}<div id="graph-result" data-state="loaded" data-target="{{.Graph.Meta.Target}}">
-  {{.GraphPayloadScript}}
-  {{template "sidebarPanel" .}}
-</div>{{end}}
-
-{{define "graphErrorFragment"}}<div id="graph-result" data-state="error" data-error="{{.Message}}"></div>{{end}}
 
 {{define "panelAttribution"}}<details class="panel-intro">
   <summary class="attribution-toggle" aria-label="Project information" title="Show or hide project information">
     <img
       class="attribution-mascot"
-      src="/assets/gopher-63.svg"
+      src="{{.AssetsPrefix}}gopher-63.svg"
       width="72"
       height="72"
       alt="go.mod Lens gopher mascot"
@@ -121,117 +107,6 @@
     {{template "githubLink" .}}
   </div>
 </details>{{end}}
-
-{{define "sidebarPanel"}}<div class="infoBox">
-  <a href="#" class="hide-info-box">show graph</a>
-  <div class="packageInfo">
-    {{if .LensPanels}}
-      <div class="all-licenses lens-section">
-        <div class="lens-heading-row">
-          <h4>Lenses</h4>
-          <div class="lens-switcher" aria-label="Analysis lenses">
-            {{range .LensPanels}}{{template "lensCircle" .}}{{end}}
-            <a
-              class="lens-circle lens-circle-add"
-              href="https://github.com/amer8/gomod-lens/blob/main/CONTRIBUTING.md#adding-lenses"
-              target="_blank"
-              rel="noreferrer"
-              aria-label="Learn how to add a lens"
-              title="Add a lens"
-            ></a>
-          </div>
-        </div>
-        {{range .LensPanels}}{{template "lensPanel" .}}{{end}}
-      </div>
-    {{end}}
-    <div class="all-licenses">
-      <h4>Relation groups</h4>
-      <div class="license-container">
-        {{range .RelationGroups}}{{template "highlightRow" .}}{{end}}
-      </div>
-    </div>
-    <div class="all-licenses">
-      <h4>Module origins</h4>
-      <div class="license-container">
-        {{range .OriginGroups}}{{template "highlightRow" .}}{{end}}
-      </div>
-    </div>
-    <div class="all-licenses">
-      <h4>Dependency hubs</h4>
-      <div class="license-container">
-        {{range .NameEntries}}{{template "nameRow" .}}{{end}}
-      </div>
-    </div>
-  </div>
-</div>{{end}}
-
-{{define "highlightRow"}}<a
-  class="license-row"
-  href="{{.Href}}"
-  data-highlight-ids="{{.IDsJSON}}"
-  data-highlight-color="{{.Color}}"
-  data-highlight-nodes-only="{{.NodesOnlyString}}"
->
-  <span>{{.Name}}</span>
-  <span class="last">{{.Count}}</span>
-</a>{{end}}
-
-{{define "lensCircle"}}<button
-  type="button"
-  class="lens-circle lens-circle-{{.ID}}{{if .Active}} lens-circle-active{{end}}"
-  data-lens-panel-target="{{.ID}}"
-  title="{{.Name}}"
-  aria-label="{{.Name}}"
-  {{if .Active}}aria-current="true"{{end}}
-></button>{{end}}
-
-{{define "lensPanel"}}<div class="lens-panel" data-lens-panel="{{.ID}}"{{if not .Active}} hidden{{end}}>
-  <div class="lens-panel-heading">
-    <span>{{.Name}}</span>
-    <span class="last">{{.Count}}</span>
-  </div>
-  <div class="license-container">
-    {{range .Groups}}{{template "scoreRow" .}}{{end}}
-  </div>
-</div>{{end}}
-
-{{define "scoreRow"}}<a
-  class="license-row score-row"
-  href="{{.Href}}"
-  data-highlight-ids="{{.IDsJSON}}"
-  data-highlight-color="{{.Color}}"
-  data-highlight-nodes-only="{{.NodesOnlyString}}"
->
-  <span>
-    <i class="score-swatch" style="{{backgroundColor .Color}}"></i>
-    {{.Name}}
-  </span>
-  <span class="last">{{.Count}}</span>
-</a>{{end}}
-
-{{define "nameRow"}}{{if eq .Count 1}}
-  <a
-    class="license-row"
-    href="{{.Href}}"
-    title="{{.Title}}"
-    data-module-target="{{.Target}}"
-  >
-    <span class="truncate">{{.Name}}</span>
-    <span class="last module-dependency-count">{{.DependencyCount}}</span>
-  </a>
-{{else}}
-  <a
-    class="license-row"
-    href="{{.Href}}"
-    title="{{.Title}}"
-    data-highlight-ids="{{.IDsJSON}}"
-    data-highlight-color="{{.Color}}"
-    data-highlight-nodes-only="{{.NodesOnlyString}}"
-  >
-    <span class="truncate">{{.Name}}</span>
-    <span class="last module-dependency-count">{{.DependencyCount}}</span>
-  </a>
-{{end}}{{end}}
 
 {{define "githubLink"}}<a
   class="github-link"

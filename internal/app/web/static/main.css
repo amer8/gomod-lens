@@ -754,21 +754,6 @@ pre {
     outline-offset: 3px;
 }
 
-.lens-panel-heading {
-    display: flex;
-    justify-content: space-between;
-    gap: 12px;
-    color: var(--primary-color);
-    font-size: 14px;
-    padding: 2px 0 6px;
-}
-
-.lens-panel-heading .last {
-    color: var(--secondary-color);
-    flex-shrink: 0;
-    font-variant-numeric: tabular-nums;
-}
-
 .lens-panel .license-row:last-child {
     border-bottom: 0;
 }

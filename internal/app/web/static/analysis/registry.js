@@ -1,7 +1,7 @@
 // Browser lens registration is shared by the toolbar, module loader and URLs.
 // Go graph enrichment is registered separately in graph.NewAnalyzer.
 // Contributor entry point: docs/development/lenses.md. Use make new-lens NAME=...
-// to scaffold a view; edit canonical files here, then run make sync-lenses.
+// to scaffold a view; edit canonical files here, then run make wasm.
 export const defaultLensID = 'openssf'
 
 /** @type {import('./types.js').BrowserLensRegistration[]} */

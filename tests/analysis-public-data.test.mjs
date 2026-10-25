@@ -44,10 +44,3 @@ test('upstream failures stay unknown without discarding successful modules; conc
   },{progress:done=>{completed=done}})
   assert.equal(records.size,12);assert.equal(records.get(3).status,'unknown');assert.equal(records.get(4).status,'observed');assert.equal(completed,12);assert.ok(max<=4)
 })
-
-test('server and WebAssembly deployments ship identical analysis assets',async()=>{
- const { readdir,readFile }=await import('node:fs/promises')
- const server=new URL('../internal/app/web/static/analysis/',import.meta.url),staticDir=new URL('../dist/assets/analysis/',import.meta.url)
- const names=await readdir(server);assert.deepEqual(names,await readdir(staticDir))
- for(const name of names)assert.equal(await readFile(new URL(name,server),'utf8'),await readFile(new URL(name,staticDir),'utf8'),name)
-})

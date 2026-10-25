@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import { compareVersions, fetchModuleVersions, selectedModuleTarget } from '../internal/app/web/static/module-versions.js'
 
 test('Go versions sort numerically, including prereleases and large version numbers', () => {
@@ -46,10 +45,4 @@ test('an aborted lookup cannot return metadata for a superseded module', async (
   const controller = new AbortController()
   controller.abort()
   await assert.rejects(fetchModuleVersions('github.com/google/uuid', 'v1.5.0', { signal: controller.signal, fetcher: async () => { throw new DOMException('Aborted', 'AbortError') } }), { name: 'AbortError' })
-})
-
-test('server and static deployments ship the same version picker', async () => {
-  const server = await readFile(new URL('../internal/app/web/static/module-versions.js', import.meta.url), 'utf8')
-  const wasm = await readFile(new URL('../dist/assets/module-versions.js', import.meta.url), 'utf8')
-  assert.equal(server, wasm)
 })

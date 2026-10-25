@@ -8,25 +8,17 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/amer8/gomod-lens/internal/modulesearch"
 )
 
-const (
-	defaultModuleSearchLimit        = 6
-	githubModuleSearchCandidateSize = 25
-)
+const defaultModuleSearchLimit = modulesearch.DefaultLimit
 
 // ModuleSearchResult describes a public module search result.
-type ModuleSearchResult struct {
-	Path        string `json:"path"`
-	Repository  string `json:"repository"`
-	URL         string `json:"url"`
-	Description string `json:"description,omitempty"`
-	Stars       int    `json:"stars,omitempty"`
-}
+type ModuleSearchResult = modulesearch.Result
 
 type moduleSearcher interface {
 	Search(ctx context.Context, query string, limit int) ([]ModuleSearchResult, error)
@@ -65,20 +57,14 @@ func (s *GitHubModuleSearcher) Search(ctx context.Context, query string, limit i
 	if query == "" {
 		return nil, nil
 	}
-	if limit <= 0 || limit > defaultModuleSearchLimit {
-		limit = defaultModuleSearchLimit
-	}
-
 	requestURL, err := url.Parse(s.searchURL)
 	if err != nil {
 		return nil, err
 	}
-	candidateLimit := max(limit, githubModuleSearchCandidateSize)
 	values := requestURL.Query()
-	values.Set("q", githubRepositorySearchQuery(query))
-	values.Set("sort", "stars")
-	values.Set("order", "desc")
-	values.Set("per_page", fmt.Sprintf("%d", candidateLimit))
+	for key, value := range modulesearch.GitHubQuery(query) {
+		values[key] = value
+	}
 	requestURL.RawQuery = values.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
@@ -112,31 +98,12 @@ func (s *GitHubModuleSearcher) Search(ctx context.Context, query string, limit i
 		return nil, fmt.Errorf("github repository search failed: %s", detail)
 	}
 
-	var payload githubRepositorySearchResponse
+	var payload modulesearch.GitHubResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode github repository search: %w", err)
 	}
 
-	results := make([]ModuleSearchResult, 0, len(payload.Items))
-	for _, item := range payload.Items {
-		fullName := strings.TrimSpace(item.FullName)
-		if fullName == "" || item.Archived {
-			continue
-		}
-		results = append(results, ModuleSearchResult{
-			Path:        "github.com/" + fullName,
-			Repository:  fullName,
-			URL:         item.HTMLURL,
-			Description: strings.TrimSpace(item.Description),
-			Stars:       item.Stars,
-		})
-	}
-
-	sortModuleSearchResults(results, query)
-	if len(results) > limit {
-		results = results[:limit]
-	}
-	return results, nil
+	return payload.Results(query, limit), nil
 }
 
 type upstreamHTTPError struct {
@@ -204,56 +171,6 @@ func retryAfterFromHeaders(header http.Header) string {
 	}
 	seconds := max(int(time.Until(time.Unix(epoch, 0)).Seconds()), 1)
 	return strconv.Itoa(seconds)
-}
-
-type githubRepositorySearchResponse struct {
-	Items []githubRepositorySearchItem `json:"items"`
-}
-
-type githubRepositorySearchItem struct {
-	FullName    string `json:"full_name"`
-	HTMLURL     string `json:"html_url"`
-	Description string `json:"description"`
-	Stars       int    `json:"stargazers_count"`
-	Archived    bool   `json:"archived"`
-}
-
-func githubRepositorySearchQuery(query string) string {
-	if strings.Contains(query, "/") {
-		return query + " in:name,description language:Go"
-	}
-	return query + " in:name,description,readme language:Go"
-}
-
-func sortModuleSearchResults(results []ModuleSearchResult, query string) {
-	query = strings.ToLower(strings.TrimSpace(query))
-	sort.SliceStable(results, func(i, j int) bool {
-		left := moduleSearchRank(results[i], query)
-		right := moduleSearchRank(results[j], query)
-		if left != right {
-			return left < right
-		}
-		return results[i].Stars > results[j].Stars
-	})
-}
-
-func moduleSearchRank(result ModuleSearchResult, query string) int {
-	repository := strings.ToLower(result.Repository)
-	name := repository
-	if slash := strings.LastIndex(repository, "/"); slash >= 0 {
-		name = repository[slash+1:]
-	}
-
-	switch {
-	case name == query:
-		return 0
-	case repository == query:
-		return 1
-	case strings.Contains(repository, query):
-		return 2
-	default:
-		return 3
-	}
 }
 
 func normalizeModuleSearchQuery(query string) string {

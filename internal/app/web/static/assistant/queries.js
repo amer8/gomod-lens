@@ -5,6 +5,7 @@ import { freshnessRecord } from '../analysis/freshness.js'
 import { publicIdentity } from '../analysis/public-data.js'
 import { hasLicenseEvidence, matchesLicense } from './license-query.js'
 import { fixedVersions } from '../analysis/vulnerabilities.js'
+import { outgoingIndex, shortestPath as findPath, reachableIDs as reachable } from '../graph-traversal.js'
 
 // Queries and follow-ups are an allowlist. Neither natural language nor model
 // output can execute code, invent graph actions, or change a module version.
@@ -47,27 +48,11 @@ export function validatePlan(value, graph) {
 export function shortestPath(graph, target) {
   const nodes = new Set(graph.nodes.map(node => node.id))
   if (!nodes.has(target) || !nodes.has(graph.rootId)) return []
-  const outgoing = new Map()
-  for (const { source, target } of graph.edges) if (nodes.has(source) && nodes.has(target)) {
-    if (!outgoing.has(source)) outgoing.set(source, [])
-    outgoing.get(source).push(target)
-  }
-  const previous = new Map([[graph.rootId, null]]), queue = [graph.rootId]
-  for (let i = 0; i < queue.length && !previous.has(target); i++) for (const next of outgoing.get(queue[i]) || []) {
-    if (!previous.has(next)) { previous.set(next, queue[i]); queue.push(next) }
-  }
-  if (!previous.has(target)) return []
-  const path = []; for (let id = target; id !== null; id = previous.get(id)) path.push(id)
-  return path.reverse()
+  const outgoing = outgoingIndex(graph.edges.filter(edge => nodes.has(edge.source) && nodes.has(edge.target)))
+  return findPath(outgoing, graph.rootId, target)
 }
 export function reachableIDs(graph, start) {
-  const seen = new Set([start]), queue = [start], outgoing = new Map()
-  for (const edge of graph.edges) {
-    if (!outgoing.has(edge.source)) outgoing.set(edge.source, [])
-    outgoing.get(edge.source).push(edge.target)
-  }
-  for (let i = 0; i < queue.length; i++) for (const next of outgoing.get(queue[i]) || []) if (!seen.has(next)) { seen.add(next); queue.push(next) }
-  return seen
+  return reachable(outgoingIndex(graph.edges), start)
 }
 export function requiredEvidence(topic) {
   if (['attention', 'advisories', 'introducers', 'fixes'].includes(topic)) return ['vulnerabilities']

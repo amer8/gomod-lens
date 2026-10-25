@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/amer8/gomod-lens/internal/graph"
+	"github.com/amer8/gomod-lens/internal/graphview"
 )
 
 //go:embed web/static
@@ -65,7 +66,6 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/assets/", http.StripPrefix("/assets/", s.staticFiles))
 	mux.HandleFunc("/", s.handleIndex)
-	mux.HandleFunc("/graph", s.handleGraphFragment)
 	mux.HandleFunc("/api/graph", s.handleGraph)
 	mux.HandleFunc("/api/modules/search", s.handleModuleSearch)
 	mux.HandleFunc("/api/health", s.handleHealth)
@@ -112,38 +112,7 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, result)
-}
-
-func (s *Server) handleGraphFragment(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-
-	ctx, cancel := context.WithTimeout(r.Context(), s.config.RequestTimeout)
-	defer cancel()
-
-	target := strings.TrimSpace(r.URL.Query().Get("target"))
-	if target == "" {
-		_ = GraphErrorFragment("target is required").Render(r.Context(), w)
-		return
-	}
-	if !s.allowRequest(w, r, s.graphLimiter) {
-		return
-	}
-	if !s.allowGlobalRequest(w, s.globalGraphLimiter) {
-		return
-	}
-	result, err := s.loadGraph(ctx, target)
-	if err != nil {
-		_ = GraphErrorFragment(err.Error()).Render(r.Context(), w)
-		return
-	}
-
-	_ = GraphFragment(newGraphViewModel(*result)).Render(r.Context(), w)
+	writeJSON(w, http.StatusOK, graphview.NewResponse(*result))
 }
 
 func (s *Server) handleModuleSearch(w http.ResponseWriter, r *http.Request) {

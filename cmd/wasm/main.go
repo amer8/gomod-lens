@@ -9,7 +9,6 @@ import (
 	"strings"
 	"syscall/js"
 
-	"github.com/amer8/gomod-lens/internal/graph"
 	"github.com/amer8/gomod-lens/internal/graphview"
 	"github.com/amer8/gomod-lens/internal/staticresolver"
 )
@@ -38,28 +37,8 @@ func resolveGraph(_ js.Value, args []js.Value) any {
 			reject.Invoke(jsError(err))
 			return
 		}
-		resolve.Invoke(toJS(newGraphResponse(*graph)))
+		resolve.Invoke(toJS(graphview.NewResponse(*graph)))
 	})
-}
-
-type graphResponse struct {
-	RootID      string            `json:"rootId"`
-	Nodes       []graph.Node      `json:"nodes"`
-	Edges       []graph.Edge      `json:"edges"`
-	Meta        graph.GraphMeta   `json:"meta"`
-	PackageInfo graph.PackageInfo `json:"packageInfo"`
-	ViewModel   graphview.Model   `json:"viewModel"`
-}
-
-func newGraphResponse(g graph.Graph) graphResponse {
-	return graphResponse{
-		RootID:      g.RootID,
-		Nodes:       g.Nodes,
-		Edges:       g.Edges,
-		Meta:        g.Meta,
-		PackageInfo: g.PackageInfo,
-		ViewModel:   graphview.New(g),
-	}
 }
 
 func searchModules(_ js.Value, args []js.Value) any {

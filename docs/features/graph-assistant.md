@@ -150,7 +150,7 @@ scroll independently so Load/Cancel stays accessible in the 40% dock.
 the app; no generation step is required. To update it, verify the selected IDs
 against the official WebLLM configuration linked in `catalogInfo.source`, then
 update the records using their MLC chat templates and weight-file metadata.
-Keep the native and static copies identical, and update `catalogInfo.version`,
+Edit the canonical catalog, rebuild with `make wasm`, and update `catalogInfo.version`,
 `source` and `checked` together when changing the pinned runtime.
 `tools/webllm-shortlist.json` defines the ten exact IDs, selection notes and
 model-card sources; keep it aligned with the catalog. The runtime URL uses the
@@ -265,7 +265,9 @@ external services documented in `PRIVACY.md`; this is not an offline mode.
 ## Code map and validation
 
 - `internal/app/web/static/assistant/queries.js`: pure query planning,
-  graph traversal, answer construction, and contextual suggestions.
+  answer construction, contextual suggestions, and graph-data validation.
+- `internal/app/web/static/graph-traversal.js`: directed traversal shared with
+  the graph renderer; rendering-specific edge IDs stay in `graph.js`.
 - `assistant/index.js`: dock, single chat history, cancellation and actions.
 - `assistant/suggestions.js`: evidence-based question ranking, module/filter
   identity, source coverage, and suppression of empty or irrelevant follow-ups.
@@ -282,11 +284,11 @@ external services documented in `PRIVACY.md`; this is not an offline mode.
 - `assistant/local-ai.js` and `assistant/worker.js`: opt-in local model lifecycle
   validated question interpretation, and streamed custom replies. No model loads at import time.
 - `analysis/index.js`: supplies lens observations and graph/selection context.
-- `dist/assets/assistant/`: identical maintained copies for GitHub Pages.
+- `dist/assets/assistant/`: generated output for GitHub Pages; edit canonical sources.
 
 Run `make check`. `tests/graph-assistant.test.mjs` covers graph cycles/shared
 dependencies, unknown evidence, replacement identities, fixed-version scope,
-suggestions, plan validation, worker cancellation, model-required gating, and Web/WASM asset parity.
+suggestions, plan validation, worker cancellation, and model-required gating.
 
 For manual checks, load `github.com/gin-gonic/gin@v1.10.0` in both deployments.
 Open the assistant, load the model, ask about advisory matches, highlight the matches, select a

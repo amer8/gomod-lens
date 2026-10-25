@@ -13,7 +13,6 @@ This module currently has no third-party Go dependencies.
 
 | Package | Version | License | Use |
 | --- | --- | --- | --- |
-| `htmx.org` | `2.0.8` | 0BSD | Self-hosted for HTML-over-the-wire interactions |
 | `ngraph.graph` | `20.1.1` | BSD-3-Clause | Self-hosted for graph data structures |
 | `ngraph.forcelayout` | `3.3.1` | BSD-3-Clause | Self-hosted for force-directed graph layout |
 | `ngraph.svg` | `0.11.0` | MIT | Self-hosted for graph rendering |

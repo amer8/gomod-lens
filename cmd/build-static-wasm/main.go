@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -10,16 +11,16 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/amer8/gomod-lens/internal/app"
 )
 
 const (
 	wasmArtifact   = "dist/assets/gomod-lens.wasm"
 	wasmRuntime    = "dist/assets/wasm_exec.js"
 	wasmEntrypoint = "./cmd/wasm"
-	vendorSource   = "internal/app/web/static/vendor"
-	vendorTarget   = "dist/assets/vendor"
-	mascotSource   = "internal/app/web/static/gopher-63.svg"
-	mascotTarget   = "dist/assets/gopher-63.svg"
+	assetsSource   = "internal/app/web/static"
+	assetsTarget   = "dist/assets"
 	defaultGo      = "go"
 )
 
@@ -68,16 +69,28 @@ func (b builder) run() error {
 		return fmt.Errorf("create GOMODCACHE: %w", err)
 	}
 
+	if err := b.syncAssets(); err != nil {
+		return err
+	}
 	if err := b.buildWithGo(); err != nil {
 		return err
 	}
-	if err := copyDirectory(filepath.Join(b.root, vendorSource), filepath.Join(b.root, vendorTarget)); err != nil {
-		return fmt.Errorf("copy browser vendor assets: %w", err)
-	}
-	if err := copyFile(filepath.Join(b.root, mascotSource), filepath.Join(b.root, mascotTarget)); err != nil {
-		return fmt.Errorf("copy mascot asset: %w", err)
-	}
 	return b.reportArtifacts()
+}
+
+func (b builder) syncAssets() error {
+	if err := copyDirectory(filepath.Join(b.root, assetsSource), filepath.Join(b.root, assetsTarget)); err != nil {
+		return fmt.Errorf("copy browser assets: %w", err)
+	}
+	index, err := os.Create(filepath.Join(b.root, "dist", "index.html"))
+	if err != nil {
+		return err
+	}
+	if err := app.StaticIndexPage().Render(context.Background(), index); err != nil {
+		_ = index.Close()
+		return err
+	}
+	return index.Close()
 }
 
 func (b builder) buildWithGo() error {
@@ -199,7 +212,7 @@ func copyDirectory(source, target string) error {
 			return nil
 		}
 		if !info.Mode().IsRegular() {
-			return fmt.Errorf("unsupported vendor asset type: %s", path)
+			return fmt.Errorf("unsupported browser asset type: %s", path)
 		}
 		return copyFile(path, destination)
 	})

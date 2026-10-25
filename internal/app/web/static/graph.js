@@ -1,4 +1,5 @@
 import createGraph from 'ngraph.graph'
+import { outgoingIndex, shortestPath as findPath, dependencyCounts } from './graph-traversal.js'
 import {
   CanvasEdgeCollection,
   createScene,
@@ -52,7 +53,7 @@ export function renderGraph(container, payload, options = {}) {
   highlightRequest = null
   onNodeSelected = options.onNodeSelected || null
   hasInitialFit = false
-  dependencyCountsByNodeID = dependencyNodeCountForNodes(payload)
+  dependencyCountsByNodeID = dependencyCounts(payload)
   maxDependencyNodeCount = maxRenderableDependencyCount(payload.nodes || [])
   graph = createRenderableGraph(payload)
   computeDistances()
@@ -660,134 +661,16 @@ function applySelectionHighlight() {
 }
 
 function selectionHighlight(targetNodeId) {
-  const links = directedLinkIndex()
-  const path = findRootPath(targetNodeId, links.outgoing)
-  const highlightedNodes = new Set(path.nodes)
-  const highlightedLinks = new Set(path.links)
+  const outgoing = outgoingIndex(graphData.edges || [])
+  const path = graphData.rootId ? findPath(outgoing, graphData.rootId, targetNodeId) : []
+  const highlightedNodes = new Set([targetNodeId, ...path])
+  const highlightedLinks = new Set(path.slice(1).map((id, index) => graph.getLink(path[index], id).id))
 
-  ;(links.incoming.get(targetNodeId) || []).forEach((link) => {
+  graph.getLinks(targetNodeId)?.forEach((link) => {
     highlightedNodes.add(link.fromId)
     highlightedNodes.add(link.toId)
     highlightedLinks.add(link.id)
   })
 
-  ;(links.outgoing.get(targetNodeId) || []).forEach((link) => {
-    highlightedNodes.add(link.fromId)
-    highlightedNodes.add(link.toId)
-    highlightedLinks.add(link.id)
-  })
-
-  return {
-    nodes: highlightedNodes,
-    links: highlightedLinks,
-  }
-}
-
-function directedLinkIndex() {
-  const outgoing = new Map()
-  const incoming = new Map()
-
-  graph.forEachLink((link) => {
-    appendLink(outgoing, link.fromId, link)
-    appendLink(incoming, link.toId, link)
-  })
-
-  return { outgoing, incoming }
-}
-
-function appendLink(index, nodeId, link) {
-  if (!index.has(nodeId)) {
-    index.set(nodeId, [])
-  }
-  index.get(nodeId).push(link)
-}
-
-function findRootPath(targetNodeId, outgoing) {
-  const rootId = graphData.rootId
-  if (!rootId || rootId === targetNodeId) {
-    return { nodes: [targetNodeId], links: [] }
-  }
-
-  const visited = new Set([rootId])
-  const previous = new Map()
-  const queue = [rootId]
-
-  for (let head = 0; head < queue.length; head += 1) {
-    const current = queue[head]
-    const links = outgoing.get(current) || []
-    for (const link of links) {
-      if (visited.has(link.toId)) continue
-      visited.add(link.toId)
-      previous.set(link.toId, { nodeId: current, linkId: link.id })
-      if (link.toId === targetNodeId) {
-        return buildPath(rootId, targetNodeId, previous)
-      }
-      queue.push(link.toId)
-    }
-  }
-
-  return { nodes: [targetNodeId], links: [] }
-}
-
-function buildPath(rootId, targetNodeId, previous) {
-  const nodes = [targetNodeId]
-  const links = []
-  let current = targetNodeId
-
-  while (current !== rootId) {
-    const step = previous.get(current)
-    if (!step) return { nodes: [targetNodeId], links: [] }
-    nodes.unshift(step.nodeId)
-    links.unshift(step.linkId)
-    current = step.nodeId
-  }
-
-  return { nodes, links }
-}
-
-function dependencyNodeCountForNodes(payload) {
-  const { nodeByID, dependencyIDsByID } = buildDependencyIndex(payload)
-  const counts = new Map()
-
-  ;(payload?.nodes || []).forEach((node) => {
-    counts.set(node.id, reachableDependencyNodeCount([node.id], dependencyIDsByID, nodeByID))
-  })
-
-  return counts
-}
-
-function buildDependencyIndex(payload) {
-  const nodes = payload?.nodes || []
-  const edges = payload?.edges || []
-  const nodeByID = new Map(nodes.map((node) => [node.id, node]))
-  const dependencyIDsByID = new Map()
-
-  edges.forEach((edge) => {
-    if (!nodeByID.has(edge.source) || !nodeByID.has(edge.target)) return
-    if (!dependencyIDsByID.has(edge.source)) {
-      dependencyIDsByID.set(edge.source, [])
-    }
-    dependencyIDsByID.get(edge.source).push(edge.target)
-  })
-
-  return { nodeByID, dependencyIDsByID }
-}
-
-function reachableDependencyNodeCount(startIDs, dependencyIDsByID, nodeByID) {
-  const startIDSet = new Set(startIDs)
-  const seenDependencyIDs = new Set()
-  const stack = startIDs.flatMap((id) => dependencyIDsByID.get(id) || [])
-
-  while (stack.length) {
-    const id = stack.pop()
-    if (startIDSet.has(id) || seenDependencyIDs.has(id)) continue
-
-    const node = nodeByID.get(id)
-    if (!node || node.root) continue
-
-    seenDependencyIDs.add(id)
-    stack.push(...(dependencyIDsByID.get(id) || []))
-  }
-
-  return seenDependencyIDs.size
+  return { nodes: highlightedNodes, links: highlightedLinks }
 }

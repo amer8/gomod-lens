@@ -41,10 +41,9 @@ to be part of the graph payload.
 ### Source ownership
 
 Author browser lens code in **`internal/app/web/static/analysis/`**. The static
-app ships committed copies under `dist/assets/analysis/`; run `make sync-lenses`
-after editing. It covers this directory, including helpers and CSS. Other
-shared assets must be mirrored separately. The WASM build does not synchronize
-these sources; parity tests detect drift. Delete obsolete files in both places.
+app is generated into ignored `dist/` by `make wasm`, including every browser
+asset and the shared Go page shell. The build replaces the asset tree, so deleted
+sources disappear from the output. No manual copying or synchronization is needed.
 
 Paths below are relative to the repository root; `analysis/` abbreviates
 `internal/app/web/static/analysis/`.
@@ -58,10 +57,14 @@ Paths below are relative to the repository root; `analysis/` abbreviates
 | `analysis/ui.js` | Shared DOM, tables, search, badges and disclosures |
 | `analysis/analysis.css` | Shared and lens-specific panel styles |
 | `analysis/navigation.js` | URL handling derived from the registry |
+| `internal/app/web/static/app-controller.js` | Shared navigation, suggestions and request lifecycle |
+| `internal/app/web/static/http-client.js` and `wasm-client.js` | Deployment-specific graph and module search loading |
 | `internal/app/web/static/graph.js` | Graph rendering and application of lens colors |
+| `internal/app/web/static/graph-traversal.js` | Shared directed paths, reachability and dependency counts |
 | `internal/graph/lens.go` and `model.go` | Go enrichment interface and serialized result types |
 | `internal/graph/analyzer.go` | Server enrichment registration |
 | `internal/staticresolver/` | WASM graph resolution and enrichment |
+| `internal/modulesearch/` | Shared server/WASM search queries, repository filtering and result ranking |
 | `internal/graphview/` | Go summary groups used by both deployments |
 | `tools/lenses.mjs` | Scaffolding and browser lens asset synchronization |
 
@@ -93,7 +96,7 @@ For a typical browser change:
 
 ```sh
 # Edit the lens module and its relevant tests, then:
-make sync-lenses
+make wasm
 node --test tests/license-evidence.test.mjs  # Substitute the relevant test file.
 make test-js                              # Includes registration and parity.
 ```
@@ -153,8 +156,8 @@ You can also register a hand-written module by adding an entry to
 
 The registry's `label` and `description` supply app guidance. To add answers
 that interpret the lens's results, extend `assistant/queries.js`,
-`assistant/suggestions.js` and `assistant/custom.js` and their tests. Mirror
-those changes separately into `dist/assets/assistant/`.
+`assistant/suggestions.js` and `assistant/custom.js` and their tests. Rebuild the
+static deployment with `make wasm` after editing canonical sources.
 
 ## Browser contract
 
@@ -189,6 +192,10 @@ module-level lookup failure should remain unknown, without discarding other
 successful module results. An empty successful lookup is a separate outcome.
 
 ### Lifecycle and ownership
+
+`analysis/index.js` owns the toolbar, lens panels, lens selection, lens URL and
+built-in graph coloring. It creates the toolbar once and builds panels directly
+for each graph. The sidebar renderer supplies summary groups and distributions.
 
 Modules are imported when the browser controller starts. Keep DOM work and
 network requests out of module initialization. The controller calls `load`
@@ -235,8 +242,9 @@ view contract above and the Go `graph.Lens` interface are separate.
 4. Compare definitions, node identities and result statuses in tests for both
    paths. Preserve lookup failures as unknown/error outcomes.
 5. If you need a panel, register a browser view that reads
-   `node.lenses['your-id']`. Extend `internal/graphview` only if the Go-rendered
-   summary groups also need to change.
+   `node.lenses['your-id']`. Extend `internal/graphview` only if the shared
+   sidebar summary groups also need to change. Return them by lens ID in
+   `viewModel.lensGroups`; presentation belongs to the browser registry.
 
 For a concrete starting point, trace `NewReleaseFreshnessLens` in
 `internal/graph/release_freshness.go`, its registration in `analyzer.go`, and
@@ -248,8 +256,8 @@ fetches repository check details in its browser view.
 ## Validation
 
 ```sh
-make sync-lenses  # After editing canonical browser lens files.
-make test-js     # Data, registry, URLs, tooling and asset parity.
+make wasm        # Rebuild the deployment from canonical sources.
+make test-js     # Data, registry, URLs and tooling.
 make check       # Also Go formatting/modules, WASM build, vet and Go tests.
 make run         # Web UI: http://localhost:8080.
 make serve       # WASM UI: http://localhost:4173 (after make wasm/check).
@@ -265,8 +273,7 @@ responsive layout. Automated checks do not replace manual UI checks.
 | --- | --- |
 | New lens does not appear | Load a graph first; verify its `registry.js` entry/import. Restart the Go server after changing embedded assets. |
 | `?lens=...` selects Scorecard instead | Use the registry `id`, not its state `key`; unknown IDs fall back to Scorecard. |
-| Change works in the server but not Pages | Run `make sync-lenses`, then reload the static page. |
-| Asset parity fails | Edit the canonical source, sync, and commit its copies. Remove both copies when deleting a lens file. |
+| Change works in the server but not Pages | Run `make wasm`, then reload the static page. |
 | Filters disappear on node selection | Store filter values in `state`; `render` receives an empty host each time. |
 | Changing a module reloads the whole inventory | Use `modulePicker: true` for a graph-wide inventory; `selection: true` is for per-node fetching. |
 | An old lookup paints a new graph | Pass `signal` into every request and leave request ownership to the controller. |

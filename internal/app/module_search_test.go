@@ -6,62 +6,106 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/amer8/gomod-lens/internal/staticresolver"
 )
 
-func TestGitHubModuleSearcherRanksExactRepoNameBeforeStarrierMatches(t *testing.T) {
+func TestModuleSearchProviders(t *testing.T) {
 	t.Parallel()
-
-	var requestedPerPage string
-	var requestedUserAgent string
-	client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
-		requestedPerPage = r.URL.Query().Get("per_page")
-		requestedUserAgent = r.Header.Get("User-Agent")
-		if got := r.URL.Query().Get("q"); !strings.Contains(got, "gin") {
-			t.Fatalf("query = %q", got)
-		}
-		return &http.Response{
-			StatusCode: http.StatusOK,
-			Header:     http.Header{"Content-Type": []string{"application/json"}},
-			Body: io.NopCloser(bytes.NewBufferString(`{
-			"items": [
-				{
-					"full_name": "avelino/awesome-go",
-					"html_url": "https://github.com/avelino/awesome-go",
-					"description": "A curated list of Go frameworks, including Gin.",
-					"stargazers_count": 171000
-				},
-				{
-					"full_name": "gin-gonic/gin",
-					"html_url": "https://github.com/gin-gonic/gin",
-					"description": "Gin is a HTTP web framework written in Go.",
-					"stargazers_count": 88000
+	const candidates = `{"items":[
+		{"full_name":"avelino/awesome-go","stargazers_count":171000},
+		{"full_name":"star/gin-helper","stargazers_count":300},
+		{"full_name":" Org/Gin ","description":" framework ","html_url":"https://github.com/Org/Gin","stargazers_count":10},
+		{"full_name":"other/gin","stargazers_count":20},
+		{"full_name":"tied/one","stargazers_count":7},
+		{"full_name":"tied/two","stargazers_count":7},
+		{"full_name":"star/archived","archived":true,"stargazers_count":999999},
+		{"full_name":" ","stargazers_count":999999},
+		{"full_name":"other/extra","stargazers_count":1}
+	]}`
+	const shortQuery = "gin in:name,description,readme language:Go"
+	all := []string{"other/gin", "Org/Gin", "star/gin-helper", "avelino/awesome-go", "tied/one", "tied/two"}
+	for _, tc := range []struct {
+		name, query, githubQuery, body string
+		limit                          int
+		want                           []string
+	}{
+		{name: "short query", query: " gin@v1.2.3 ", githubQuery: shortQuery, limit: 6, want: all},
+		{name: "repository query", query: " Org/Gin@latest ", githubQuery: "Org/Gin in:name,description language:Go", limit: 3, want: []string{"Org/Gin", "avelino/awesome-go", "star/gin-helper"}},
+		{name: "limit after ranking", query: "gin", githubQuery: shortQuery, limit: 1, want: all[:1]},
+		{name: "default limit", query: "gin", githubQuery: shortQuery, want: all},
+		{name: "negative limit", query: "gin", githubQuery: shortQuery, limit: -1, want: all},
+		{name: "excessive limit", query: "gin", githubQuery: shortQuery, limit: 99, want: all},
+		{name: "empty query", query: " \t "},
+		{name: "no candidates", query: "gin", githubQuery: shortQuery, body: `{}`, want: []string{}},
+		{name: "all filtered", query: "gin", githubQuery: shortQuery, body: `{"items":[{"full_name":"old/gin","archived":true},{"full_name":" "}]}`, want: []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			requests := 0
+			fetch := func(_ context.Context, request staticresolver.FetchRequest) (string, error) {
+				requests++
+				u, err := url.Parse(request.URL)
+				if err != nil {
+					t.Fatal(err)
 				}
-			]
-		}`)),
-		}, nil
-	})}
+				want := url.Values{"q": {tc.githubQuery}, "per_page": {"25"}, "sort": {"stars"}, "order": {"desc"}}
+				if !reflect.DeepEqual(u.Query(), want) || request.Accept != "application/vnd.github+json" {
+					t.Fatalf("request = %+v, want query %v and GitHub JSON", request, want)
+				}
+				if tc.body != "" {
+					return tc.body, nil
+				}
+				return candidates, nil
+			}
+			client := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.Header.Get("User-Agent") != defaultUpstreamUserAgent || r.Header.Get("X-GitHub-Api-Version") != "2022-11-28" {
+					t.Fatalf("server request headers = %v", r.Header)
+				}
+				body, err := fetch(r.Context(), staticresolver.FetchRequest{URL: r.URL.String(), Accept: r.Header.Get("Accept")})
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, err
+			})}
+			server := NewGitHubModuleSearcher(client)
+			wasm := staticresolver.New(searchFetcher(fetch))
+			for name, search := range map[string]func(context.Context, string, int) ([]ModuleSearchResult, error){"server": server.Search, "wasm": wasm.SearchModules} {
+				t.Run(name, func(t *testing.T) {
+					before := requests
+					results, err := search(context.Background(), tc.query, tc.limit)
+					if err != nil {
+						t.Fatal(err)
+					}
+					var got []string
+					if results != nil {
+						got = make([]string, 0, len(results))
+					}
+					for _, result := range results {
+						got = append(got, result.Repository)
+						if result.Path != "github.com/"+result.Repository {
+							t.Fatalf("module path = %q", result.Path)
+						}
+						if result.Repository == "Org/Gin" && (result.Description != "framework" || result.URL != "https://github.com/Org/Gin" || result.Stars != 10) {
+							t.Fatalf("converted result = %+v", result)
+						}
+					}
+					if !reflect.DeepEqual(got, tc.want) {
+						t.Fatalf("repositories = %v, want %v", got, tc.want)
+					}
+					if (requests > before) != (tc.githubQuery != "") {
+						t.Fatalf("unexpected request count: %d", requests-before)
+					}
+				})
+			}
+		})
+	}
+}
 
-	searcher := NewGitHubModuleSearcher(client)
-	searcher.searchURL = "https://api.github.test/search/repositories"
+type searchFetcher func(context.Context, staticresolver.FetchRequest) (string, error)
 
-	results, err := searcher.Search(context.Background(), "gin", 1)
-	if err != nil {
-		t.Fatalf("Search() error = %v", err)
-	}
-	if requestedPerPage != "25" {
-		t.Fatalf("per_page = %q", requestedPerPage)
-	}
-	if requestedUserAgent != defaultUpstreamUserAgent {
-		t.Fatalf("User-Agent = %q", requestedUserAgent)
-	}
-	if len(results) != 1 {
-		t.Fatalf("len(results) = %d", len(results))
-	}
-	if results[0].Path != "github.com/gin-gonic/gin" {
-		t.Fatalf("top result = %q", results[0].Path)
-	}
+func (f searchFetcher) FetchText(ctx context.Context, request staticresolver.FetchRequest) (string, error) {
+	return f(ctx, request)
 }
 
 func TestGitHubModuleSearcherReturnsRetryAfterForRateLimit(t *testing.T) {

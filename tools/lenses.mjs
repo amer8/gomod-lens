@@ -1,16 +1,8 @@
-import { access, cp, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { access, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const sourceDirectory = 'internal/app/web/static/analysis'
-const mirrorDirectory = 'dist/assets/analysis'
-
-// Browser lens code is authored in the server asset tree. The static app ships
-// copies of that same code; its app-static.js entrypoint remains separate.
-export async function syncLenses(root) {
-  await cp(resolve(root, sourceDirectory), resolve(root, mirrorDirectory), { recursive: true })
-}
-
 async function requireMissing(path) {
   try {
     await access(path)
@@ -36,7 +28,7 @@ export async function createLens(root, id) {
   }
   const sourcePath = resolve(root, sourceDirectory, id + '.js')
   const testPath = resolve(root, 'tests', id + '.test.mjs')
-  await Promise.all([sourcePath, testPath, resolve(root, mirrorDirectory, id + '.js')].map(requireMissing))
+  await Promise.all([sourcePath, testPath].map(requireMissing))
   const title = id.split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')
   const registration = `  {
     id: '${id}', key: '${id}', title: '${title}',
@@ -102,7 +94,6 @@ test('${id} stops when its graph request is canceled', async () => {
     await Promise.all(created.map(path => unlink(path)))
     throw error
   }
-  await syncLenses(root)
   return { sourcePath, testPath }
 }
 
@@ -110,14 +101,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const root = fileURLToPath(new URL('../', import.meta.url))
   const [command, id, ...extra] = process.argv.slice(2)
   try {
-    if (command === 'sync' && !id) {
-      await syncLenses(root)
-      console.log('Synced browser lenses from internal/app/web/static/analysis to dist/assets/analysis.')
-    } else if (command === 'new' && !extra.length) {
-      const { sourcePath, testPath } = await createLens(root, id)
-      console.log(`Created ${sourcePath}\nCreated ${testPath}\nRegistered the lens and synced static copies.`)
-      console.log(`Next: make test-js\nOpen: ?lens=${id}#target=github.com%2Fspf13%2Fcobra`)
-    } else throw new Error('Usage: node tools/lenses.mjs new <lens-id> | sync')
+    if (command !== 'new' || extra.length) throw new Error('Usage: node tools/lenses.mjs new <lens-id>')
+    const { sourcePath, testPath } = await createLens(root, id)
+    console.log(`Created ${sourcePath}\nCreated ${testPath}\nRegistered the lens.`)
+    console.log(`Next: make test-js\nOpen: ?lens=${id}#target=github.com%2Fspf13%2Fcobra`)
   } catch (error) {
     console.error(error.message)
     process.exitCode = 1

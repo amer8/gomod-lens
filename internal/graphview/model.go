@@ -1,7 +1,6 @@
 package graphview
 
 import (
-	"encoding/json"
 	"net/url"
 	"sort"
 	"strings"
@@ -27,25 +26,23 @@ const (
 	releaseFreshnessErrorColor   = "#e5a15a"
 )
 
-// Model prepares graph analysis data for templates and client-side controls.
-type Model struct {
-	Graph                  graph.Graph  `json:"-"`
-	RelationGroups         []GroupEntry `json:"relationGroups"`
-	LensPanels             []LensPanel  `json:"lensPanels"`
-	OpenSSFGroups          []GroupEntry `json:"openSSFGroups"`
-	ReleaseFreshnessGroups []GroupEntry `json:"releaseFreshnessGroups"`
-	OriginGroups           []GroupEntry `json:"originGroups"`
-	NameEntries            []GroupEntry `json:"nameEntries"`
+// Response is the graph and sidebar data returned by the HTTP and WASM clients.
+type Response struct {
+	graph.Graph
+	ViewModel Model `json:"viewModel"`
 }
 
-// LensPanel describes the sidebar presentation for one analysis lens.
-type LensPanel struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Description string       `json:"description,omitempty"`
-	Count       int          `json:"count"`
-	Active      bool         `json:"active"`
-	Groups      []GroupEntry `json:"groups"`
+// NewResponse prepares the shared browser response without changing graph fields.
+func NewResponse(g graph.Graph) Response {
+	return Response{Graph: g, ViewModel: New(g)}
+}
+
+// Model prepares graph analysis data for the browser sidebar.
+type Model struct {
+	RelationGroups []GroupEntry            `json:"relationGroups"`
+	LensGroups     map[string][]GroupEntry `json:"lensGroups"`
+	OriginGroups   []GroupEntry            `json:"originGroups"`
+	NameEntries    []GroupEntry            `json:"nameEntries"`
 }
 
 // GroupEntry describes a filterable or navigable group of graph nodes.
@@ -53,10 +50,8 @@ type GroupEntry struct {
 	Name            string   `json:"name"`
 	Count           int      `json:"count"`
 	IDs             []string `json:"ids"`
-	IDsJSON         string   `json:"idsJSON"`
 	Color           string   `json:"color,omitempty"`
 	NodesOnly       bool     `json:"nodesOnly"`
-	NodesOnlyString string   `json:"nodesOnlyString"`
 	DependencyCount int      `json:"dependencyCount"`
 	Href            string   `json:"href"`
 	Title           string   `json:"title,omitempty"`
@@ -65,16 +60,14 @@ type GroupEntry struct {
 
 // New creates a view model from a dependency graph.
 func New(g graph.Graph) Model {
-	openSSFGroups := OpenSSFGroups(g)
-	releaseFreshnessGroups := ReleaseFreshnessGroups(g)
 	return Model{
-		Graph:                  g,
-		RelationGroups:         RelationGroups(g),
-		LensPanels:             LensPanels(g, openSSFGroups, releaseFreshnessGroups),
-		OpenSSFGroups:          openSSFGroups,
-		ReleaseFreshnessGroups: releaseFreshnessGroups,
-		OriginGroups:           OriginGroups(g),
-		NameEntries:            NameEntries(g),
+		RelationGroups: RelationGroups(g),
+		LensGroups: map[string][]GroupEntry{
+			graph.LensOpenSSF:          OpenSSFGroups(g),
+			graph.LensReleaseFreshness: ReleaseFreshnessGroups(g),
+		},
+		OriginGroups: OriginGroups(g),
+		NameEntries:  NameEntries(g),
 	}
 }
 
@@ -142,62 +135,6 @@ func OriginGroups(g graph.Graph) []GroupEntry {
 		groups = groups[:20]
 	}
 	return groups
-}
-
-// LensPanels groups lens-specific entries for the sidebar.
-func LensPanels(g graph.Graph, openSSFGroups []GroupEntry, releaseFreshnessGroups []GroupEntry) []LensPanel {
-	panels := make([]LensPanel, 0, len(g.Meta.Lenses))
-	seen := make(map[string]bool, len(g.Meta.Lenses))
-	for _, definition := range g.Meta.Lenses {
-		id := strings.ToLower(strings.TrimSpace(definition.ID))
-		if id == "" || seen[id] {
-			continue
-		}
-		seen[id] = true
-
-		switch id {
-		case graph.LensOpenSSF:
-			if panel, ok := lensPanelFromGroups(definition, openSSFGroups); ok {
-				panels = append(panels, panel)
-			}
-		case graph.LensReleaseFreshness:
-			if panel, ok := lensPanelFromGroups(definition, releaseFreshnessGroups); ok {
-				panels = append(panels, panel)
-			}
-		}
-	}
-
-	if !seen[graph.LensOpenSSF] && len(openSSFGroups) > 0 {
-		if panel, ok := lensPanelFromGroups(graph.OpenSSFLensDefinition(), openSSFGroups); ok {
-			panels = append(panels, panel)
-		}
-	}
-	if !seen[graph.LensReleaseFreshness] && len(releaseFreshnessGroups) > 0 {
-		if panel, ok := lensPanelFromGroups(graph.ReleaseFreshnessLensDefinition(), releaseFreshnessGroups); ok {
-			panels = append(panels, panel)
-		}
-	}
-	if len(panels) > 0 {
-		panels[0].Active = true
-	}
-	return panels
-}
-
-func lensPanelFromGroups(definition graph.LensDefinition, groups []GroupEntry) (LensPanel, bool) {
-	if len(groups) == 0 {
-		return LensPanel{}, false
-	}
-	count := 0
-	for _, group := range groups {
-		count += group.Count
-	}
-	return LensPanel{
-		ID:          definition.ID,
-		Name:        definition.Name,
-		Description: definition.Description,
-		Count:       count,
-		Groups:      groups,
-	}, true
 }
 
 // OpenSSFGroups groups nodes by OpenSSF Scorecard status and score buckets.
@@ -452,23 +389,9 @@ func nodeIDsByName(nodes []graph.Node, name string) []string {
 
 func hydrateGroupEntry(entry *GroupEntry) {
 	entry.Count = len(entry.IDs)
-	entry.IDsJSON = jsonAttribute(entry.IDs)
 	if entry.Href == "" {
 		entry.Href = "#"
 	}
-	if entry.NodesOnly {
-		entry.NodesOnlyString = "true"
-	} else {
-		entry.NodesOnlyString = "false"
-	}
-}
-
-func jsonAttribute(values []string) string {
-	raw, err := json.Marshal(values)
-	if err != nil {
-		return "[]"
-	}
-	return string(raw)
 }
 
 func moduleOrigin(modulePath string) string {

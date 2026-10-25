@@ -57,7 +57,7 @@ jobs:
       - name: Test
         run: go test ./...
 
-      - name: Test browser logic and asset parity
+      - name: Test browser logic
         run: make test-js
 
       - name: Test WASM promise lifecycle

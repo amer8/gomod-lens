@@ -1,6 +1,5 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdir, readFile } from 'node:fs/promises'
 import { topicIDs, topics, suggestions, validatePlan, shortestPath, reachableIDs, answerQuestion } from '../internal/app/web/static/assistant/queries.js'
 import { LocalAI } from '../internal/app/web/static/assistant/local-ai.js'
 
@@ -44,6 +43,14 @@ test('path and introducer analysis handle cycles and shared transitive modules',
   assert.deepEqual(result.items.map(item => item.nodeID), ['a', 'b'])
   assert.match(result.paragraphs.join(' '), /1 unknown/)
   assert.deepEqual(result.actions[0].ids, ['c'])
+})
+test('assistant paths filter missing nodes while reachability retains raw edge chains', () => {
+  const payload = { rootId: 'root', nodes: ['root', 'a', 'b', 'target'].map(id => ({ id })),
+    edges: [['root', 'missing'], ['missing', 'target'], ['root', 'a'], ['a', 'b'], ['b', 'target']].map(([source, target]) => ({ source, target })) }
+  assert.deepEqual(shortestPath(payload, 'target'), ['root', 'a', 'b', 'target'])
+  assert.deepEqual(shortestPath(payload, 'missing'), [])
+  assert.deepEqual(shortestPath({ ...payload, rootId: 'absent' }, 'target'), [])
+  assert.deepEqual([...reachableIDs(payload, 'root')], ['root', 'missing', 'a', 'target', 'b'])
 })
 test('unknown and absent observations never become successful empty results', () => {
   const answer = answerQuestion('advisories', context, evidence)
@@ -96,10 +103,4 @@ test('stopping a local-AI request terminates its worker and rejects pending work
   controller.abort()
   await assert.rejects(promise, { name: 'AbortError' })
   assert.equal(terminated, true); assert.equal(ai.pending.size, 0); assert.equal(ai.ready, false)
-})
-test('server and static builds ship the same assistant code and stylesheet', async () => {
-  const server = new URL('../internal/app/web/static/assistant/', import.meta.url), staticDir = new URL('../dist/assets/assistant/', import.meta.url)
-  const names = await readdir(server); assert.deepEqual(names, await readdir(staticDir))
-  for (const name of names) assert.equal(await readFile(new URL(name, server), 'utf8'), await readFile(new URL(name, staticDir), 'utf8'), name)
-  for (const file of ['../internal/app/web/templates/view.html', '../dist/index.html']) assert.match(await readFile(new URL(file, import.meta.url), 'utf8'), /assistant\/assistant.css/)
 })

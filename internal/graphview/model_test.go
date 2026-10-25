@@ -1,6 +1,7 @@
-package app
+package graphview
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/amer8/gomod-lens/internal/graph"
@@ -9,7 +10,7 @@ import (
 func TestOpenSSFGroupsUsesFiveScoreBuckets(t *testing.T) {
 	t.Parallel()
 
-	groups := openSSFGroups(graph.Graph{
+	groups := OpenSSFGroups(graph.Graph{
 		Nodes: []graph.Node{
 			scoreNode("excellent", 9.0),
 			scoreNode("strong", 7.0),
@@ -42,7 +43,7 @@ func TestOpenSSFGroupsUsesFiveScoreBuckets(t *testing.T) {
 func TestRelationGroupsUseNonDirectModulesLabel(t *testing.T) {
 	t.Parallel()
 
-	model := newGraphViewModel(graph.Graph{
+	model := New(graph.Graph{
 		Nodes: []graph.Node{
 			{ID: "root", Root: true},
 			{ID: "direct", Direct: true},
@@ -68,7 +69,7 @@ func TestRelationGroupsUseNonDirectModulesLabel(t *testing.T) {
 func TestRelationGroupsShowReplacementsWhenPresent(t *testing.T) {
 	t.Parallel()
 
-	model := newGraphViewModel(graph.Graph{
+	model := New(graph.Graph{
 		Nodes: []graph.Node{
 			{ID: "root", Root: true},
 			{ID: "replacement", Replaced: true},
@@ -87,7 +88,7 @@ func TestRelationGroupsShowReplacementsWhenPresent(t *testing.T) {
 func TestNameEntriesShowDependencyHubsAndLeafBucket(t *testing.T) {
 	t.Parallel()
 
-	model := newGraphViewModel(graph.Graph{
+	model := New(graph.Graph{
 		Nodes: []graph.Node{
 			{ID: "root", Name: "example.com/root", Root: true},
 			{ID: "hub", Name: "example.com/hub", Direct: true},
@@ -140,7 +141,7 @@ func TestNameEntriesShowDependencyHubsAndLeafBucket(t *testing.T) {
 func TestOpenSSFGroupsSeparatesUnavailableAndErrors(t *testing.T) {
 	t.Parallel()
 
-	groups := openSSFGroups(graph.Graph{
+	groups := OpenSSFGroups(graph.Graph{
 		Nodes: []graph.Node{
 			{ID: "missing", OpenSSF: &graph.OpenSSFScore{Status: "no_scorecard"}},
 			{ID: "unavailable", OpenSSF: &graph.OpenSSFScore{Status: "unavailable"}},
@@ -169,7 +170,7 @@ func TestOpenSSFGroupsSeparatesUnavailableAndErrors(t *testing.T) {
 func TestOpenSSFGroupsShownWithoutOverlayFlag(t *testing.T) {
 	t.Parallel()
 
-	groups := openSSFGroups(graph.Graph{
+	groups := OpenSSFGroups(graph.Graph{
 		Nodes: []graph.Node{scoreNode("excellent", 9.0)},
 	})
 
@@ -182,7 +183,7 @@ func TestOpenSSFGroupsReadGenericLensResults(t *testing.T) {
 	t.Parallel()
 
 	score := 7.5
-	groups := openSSFGroups(graph.Graph{
+	groups := OpenSSFGroups(graph.Graph{
 		Nodes: []graph.Node{{
 			ID: "generic",
 			Lenses: graph.LensResults{
@@ -199,73 +200,52 @@ func TestOpenSSFGroupsReadGenericLensResults(t *testing.T) {
 	}
 }
 
-func TestLensPanelsIncludeOpenSSFPanel(t *testing.T) {
+func TestLensGroupsJSONDoesNotDependOnPresentationDefinitions(t *testing.T) {
 	t.Parallel()
 
 	score := 8.2
-	model := newGraphViewModel(graph.Graph{
-		Meta: graph.GraphMeta{
-			Lenses: []graph.LensDefinition{graph.OpenSSFLensDefinition()},
+	g := graph.Graph{Nodes: []graph.Node{{
+		ID: "module",
+		Lenses: graph.LensResults{
+			graph.LensOpenSSF:          {Status: "found", Score: &score},
+			graph.LensReleaseFreshness: graph.ClassifyReleaseFreshness("example.com/mod", "v1.2.0", "v1.3.0").LensResult(),
 		},
-		Nodes: []graph.Node{{
-			ID: "scored",
-			Lenses: graph.LensResults{
-				graph.LensOpenSSF: {
-					Status: "found",
-					Score:  &score,
-				},
-			},
-		}},
-	})
-
-	if len(model.LensPanels) != 1 {
-		t.Fatalf("lens panel count = %d, want 1", len(model.LensPanels))
-	}
-	panel := model.LensPanels[0]
-	if panel.ID != graph.LensOpenSSF || panel.Name != "OpenSSF Scorecard" || !panel.Active {
-		t.Fatalf("lens panel = %+v, want OpenSSF Scorecard", panel)
-	}
-	if panel.Count != 1 || len(panel.Groups) != 1 || panel.Groups[0].Name != "7.0 - 8.9" {
-		t.Fatalf("lens panel groups = %+v, want strong OpenSSF bucket", panel)
+	}}}
+	for _, definitions := range [][]graph.LensDefinition{
+		nil,
+		{graph.ReleaseFreshnessLensDefinition(), graph.OpenSSFLensDefinition()},
+		{graph.OpenSSFLensDefinition(), graph.OpenSSFLensDefinition(), {ID: "custom"}},
+	} {
+		g.Meta.Lenses = definitions
+		raw, err := json.Marshal(NewResponse(g))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var payload struct {
+			ViewModel struct {
+				LensGroups map[string][]GroupEntry `json:"lensGroups"`
+			} `json:"viewModel"`
+		}
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Fatal(err)
+		}
+		for id, want := range map[string]string{graph.LensOpenSSF: "7.0 - 8.9", graph.LensReleaseFreshness: "minor behind"} {
+			groups := payload.ViewModel.LensGroups[id]
+			if len(groups) != 1 || groups[0].Name != want || groups[0].Count != 1 || len(groups[0].IDs) != 1 || groups[0].IDs[0] != "module" {
+				t.Fatalf("%s groups = %+v, want one module in %s; definitions = %+v", id, groups, want, definitions)
+			}
+		}
 	}
 }
 
-func TestLensPanelsIncludeReleaseFreshnessPanel(t *testing.T) {
+func TestLensGroupsEmptyGraph(t *testing.T) {
 	t.Parallel()
 
-	score := 8.2
-	freshness := graph.ClassifyReleaseFreshness("example.com/mod", "v1.2.0", "v1.3.0").LensResult()
-	model := newGraphViewModel(graph.Graph{
-		Meta: graph.GraphMeta{
-			Lenses: []graph.LensDefinition{
-				graph.OpenSSFLensDefinition(),
-				graph.ReleaseFreshnessLensDefinition(),
-			},
-		},
-		Nodes: []graph.Node{{
-			ID: "stale",
-			Lenses: graph.LensResults{
-				graph.LensOpenSSF: {
-					Status: "found",
-					Score:  &score,
-				},
-				graph.LensReleaseFreshness: freshness,
-			},
-		}},
-	})
-
-	if len(model.LensPanels) != 2 {
-		t.Fatalf("lens panel count = %d, want 2", len(model.LensPanels))
-	}
-	if model.LensPanels[0].ID != graph.LensOpenSSF || !model.LensPanels[0].Active {
-		t.Fatalf("first lens panel = %+v, want active OpenSSF panel", model.LensPanels[0])
-	}
-	releasePanel := model.LensPanels[1]
-	if releasePanel.ID != graph.LensReleaseFreshness || releasePanel.Name != "Release Freshness" || releasePanel.Active {
-		t.Fatalf("release lens panel = %+v, want inactive Release Freshness panel", releasePanel)
-	}
-	if releasePanel.Count != 1 || len(releasePanel.Groups) != 1 || releasePanel.Groups[0].Name != "minor behind" {
-		t.Fatalf("release lens groups = %+v, want minor behind bucket", releasePanel.Groups)
+	groups := New(graph.Graph{}).LensGroups
+	for _, id := range []string{graph.LensOpenSSF, graph.LensReleaseFreshness} {
+		if len(groups[id]) != 0 {
+			t.Fatalf("empty graph has %s distribution: %+v", id, groups[id])
+		}
 	}
 }
 

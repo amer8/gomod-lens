@@ -258,24 +258,29 @@ func TestResolveGraphPrunesTransitiveRequirementsForModernModules(t *testing.T) 
 	}
 }
 
-func TestResolveGraphKeepsTransitiveRequirementsForLegacyModules(t *testing.T) {
-	fetcher := fakeFetcher{
-		proxyModuleURL("example.com/root") + "/@latest":            `{"Version":"v1.0.0"}`,
-		proxyModuleURL("example.com/root") + "/@v/v1.0.0.mod":      "module example.com/root\n\ngo 1.25.0\n\nrequire example.com/legacy v1.0.0\n",
-		proxyModuleURL("example.com/legacy") + "/@v/v1.0.0.mod":    "module example.com/legacy\n\ngo 1.16\n\nrequire example.com/telemetry v1.0.0\n",
-		proxyModuleURL("example.com/telemetry") + "/@v/v1.0.0.mod": "module example.com/telemetry\n\ngo 1.24.0\n",
-	}
-	resolver := New(fetcher)
+func TestResolveGraphKeepsTransitiveRequirementsForUnprunedModules(t *testing.T) {
+	for _, version := range []string{"1.16", "1.17.0junk", "1.17.0-custom1", "2"} {
+		t.Run(version, func(t *testing.T) {
+			fetcher := fakeFetcher{
+				proxyModuleURL("example.com/root") + "/@latest":            `{"Version":"v1.0.0"}`,
+				proxyModuleURL("example.com/root") + "/@v/v1.0.0.mod":      "module example.com/root\n\ngo 1.25.0\n\nrequire example.com/legacy v1.0.0\n",
+				proxyModuleURL("example.com/legacy") + "/@v/v1.0.0.mod":    "module example.com/legacy\n\ngo " + version + "\n\nrequire example.com/telemetry v1.0.0\n",
+				proxyModuleURL("example.com/telemetry") + "/@v/v1.0.0.mod": "module example.com/telemetry\n\ngo 1.24.0\n\nrequire example.com/leaf v1.0.0\n",
+				proxyModuleURL("example.com/leaf") + "/@v/v1.0.0.mod":      "module example.com/leaf\n\ngo 1.24.0\n",
+			}
+			resolver := New(fetcher)
 
-	result, err := resolver.ResolveGraph(context.Background(), "example.com/root@latest", Options{})
-	if err != nil {
-		t.Fatalf("ResolveGraph returned error: %v", err)
-	}
-	if telemetry := nodeByID(result.Nodes, "example.com/telemetry@v1.0.0"); telemetry == nil {
-		t.Fatal("legacy dependency's transitive requirement should stay selected")
-	}
-	if !hasEdge(result.Edges, "example.com/legacy@v1.0.0", "example.com/telemetry@v1.0.0") {
-		t.Fatalf("expected legacy transitive edge: %+v", result.Edges)
+			result, err := resolver.ResolveGraph(context.Background(), "example.com/root@latest", Options{})
+			if err != nil {
+				t.Fatalf("ResolveGraph returned error: %v", err)
+			}
+			if leaf := nodeByID(result.Nodes, "example.com/leaf@v1.0.0"); leaf == nil {
+				t.Fatal("unpruned traversal must retain requirements beyond the modern dependency")
+			}
+			if !hasEdge(result.Edges, "example.com/legacy@v1.0.0", "example.com/telemetry@v1.0.0") {
+				t.Fatalf("expected transitive edge: %+v", result.Edges)
+			}
+		})
 	}
 }
 
@@ -316,9 +321,29 @@ func TestPruningForGoDirective(t *testing.T) {
 		want    modulePruning
 	}{
 		{version: "", want: pruningUnpruned},
+		{version: " \t ", want: pruningUnpruned},
 		{version: "1.16", want: pruningUnpruned},
+		{version: "1.16.99", want: pruningUnpruned},
+		{version: "1.16rc1", want: pruningUnpruned},
 		{version: "1.17", want: pruningPruned},
+		{version: "1.17.0", want: pruningPruned},
+		{version: "1.17beta1", want: pruningPruned},
+		{version: "1.17rc1", want: pruningPruned},
 		{version: "1.25.0", want: pruningPruned},
+		{version: " 1.26rc2 ", want: pruningPruned},
+		{version: "2.0", want: pruningPruned},
+		{version: "1.9223372036854775808", want: pruningPruned},
+		{version: "9223372036854775808.0", want: pruningPruned},
+		{version: "2", want: pruningUnpruned},
+		{version: "go1.26", want: pruningUnpruned},
+		{version: "v1.26", want: pruningUnpruned},
+		{version: "1.x", want: pruningUnpruned},
+		{version: "1.17.0junk", want: pruningUnpruned},
+		{version: "1.17rc", want: pruningUnpruned},
+		{version: "1.17.0-custom1", want: pruningUnpruned},
+		{version: "1.17..0", want: pruningUnpruned},
+		{version: "1.017", want: pruningUnpruned},
+		{version: "1.17+build1", want: pruningUnpruned},
 	}
 
 	for _, tc := range cases {
