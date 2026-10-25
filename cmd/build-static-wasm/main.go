@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -11,8 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/amer8/gomod-lens/internal/app"
 )
 
 const (
@@ -21,6 +18,7 @@ const (
 	wasmEntrypoint = "./cmd/wasm"
 	assetsSource   = "internal/app/web/static"
 	assetsTarget   = "dist/assets"
+	indexSource    = "internal/app/web/index.html"
 	defaultGo      = "go"
 )
 
@@ -82,15 +80,7 @@ func (b builder) syncAssets() error {
 	if err := copyDirectory(filepath.Join(b.root, assetsSource), filepath.Join(b.root, assetsTarget)); err != nil {
 		return fmt.Errorf("copy browser assets: %w", err)
 	}
-	index, err := os.Create(filepath.Join(b.root, "dist", "index.html"))
-	if err != nil {
-		return err
-	}
-	if err := app.StaticIndexPage().Render(context.Background(), index); err != nil {
-		_ = index.Close()
-		return err
-	}
-	return index.Close()
+	return copyFile(filepath.Join(b.root, indexSource), filepath.Join(b.root, "dist", "index.html"))
 }
 
 func (b builder) buildWithGo() error {

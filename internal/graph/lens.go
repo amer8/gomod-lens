@@ -1,17 +1,6 @@
 package graph
 
-import (
-	"context"
-	"strings"
-)
-
-// Lens analyzes an existing dependency graph and attaches per-node results.
-// Browser views have a separate interface in internal/app/web/static/analysis/types.js.
-// See docs/development/lenses.md before adding either layer.
-type Lens interface {
-	Definition() LensDefinition
-	Analyze(ctx context.Context, graph *Graph) error
-}
+import "strings"
 
 // OpenSSFLensDefinition returns metadata for the built-in OpenSSF Scorecard lens.
 func OpenSSFLensDefinition() LensDefinition {

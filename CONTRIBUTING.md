@@ -4,58 +4,42 @@ Thanks for taking the time to improve go.mod Lens.
 
 ## Development Setup
 
-You need Go 1.26 or newer and Node.js 22 or newer for browser tests. The
-page shell uses Go's standard `html/template` package; shared JavaScript renders
-the graph and sidebar from JSON. No npm install
-or JavaScript build step is required.
+You need Go 1.26 or newer and Node.js 22 or newer for tests. The application
+runs in the browser: Go/WASM resolves public module graphs, and JavaScript
+renders the graph, sidebar and lenses. No npm install or JavaScript build step
+is required.
 
-Run the app locally:
+Run the static application locally:
 
 ```bash
-make run
+make serve
 ```
 
-The public web UI and HTTP API accept remote module targets only.
+Open `http://localhost:4173`. `make run` is an alias for the same preview;
+set `PORT` to use a different port. The preview server only serves files.
+There is no application backend or HTTP API.
 
-Run tests with repo-local cache directories:
+Run focused tests with repo-local Go cache directories:
 
 ```bash
 make test
 make test-js
+make test-wasm
 ```
 
 ## Static Build
 
-```bash
-make wasm
-make serve
-```
+`make wasm` generates the complete, ignored `dist/` deployment from
+`internal/app/web/index.html` and `internal/app/web/static/`, and compiles
+`cmd/wasm`. The build replaces the asset tree so deleted assets disappear.
+Edit canonical sources only; `make serve` rebuilds before serving them.
 
-Open `http://localhost:4173`.
-
-`make wasm` generates the complete, ignored `dist/` deployment from the shared
-Go page template and `internal/app/web/static/`. Both deployments use one browser
-controller, with small HTTP and WASM clients. Edit canonical sources only;
-`make serve` rebuilds the static deployment before serving it.
-
-## API
-
-```text
-GET /api/graph?target=golang.org/x/tools@latest
-GET /api/modules/search?q=golang
-GET /api/health
-```
-
-`/api/graph` is intentionally limited to public remote module targets such as
-`golang.org/x/tools@latest`. The underlying graph analyzer still has local-module
-support for internal use and tests, but the HTTP API always runs remote module
-analysis and rejects local filesystem paths so a hosted deployment cannot be
-used to inspect server files or private workspace state.
-
-`/api/graph` returns the graph fields (`rootId`, `nodes`, `edges`, `meta`,
-`packageInfo`) plus `viewModel`, the sidebar groups shared with the WASM build.
+The WASM client returns graph fields (`rootId`, `nodes`, `edges`, `meta`,
+`packageInfo`) plus `viewModel`, the sidebar summary groups.
 `viewModel.lensGroups` maps lens IDs to distribution groups; the browser registry
-owns lens names, descriptions and display order.
+owns lens names, descriptions and display order. Public data is fetched directly
+from upstream APIs, which must support browser CORS access. License evidence
+comes from deps.dev; the app does not inspect local source files.
 
 ## Adding Lenses
 
@@ -66,19 +50,17 @@ enrichment. To create a working browser lens with registration and tests:
 ```bash
 make new-lens NAME=module-overview
 make test-js
-make run
+make serve
 ```
 
-Edit browser lenses in `internal/app/web/static/analysis/`, then run
-`make wasm` to rebuild the static deployment. Use Go graph
-enrichment when results also need to appear in `/api/graph`.
-
-Keep a new lens narrowly focused, give it a stable lowercase ID, and document
-any new upstream services in `PRIVACY.md` and `THIRD_PARTY_NOTICES.md`.
+Edit browser lenses in `internal/app/web/static/analysis/`. Use Go graph
+enrichment in `internal/staticresolver` when results belong in the initial
+graph payload. Keep a new lens narrowly focused, give it a stable lowercase ID,
+and document new upstream services in `PRIVACY.md` and `THIRD_PARTY_NOTICES.md`.
 
 ## Before Opening a Pull Request
 
-Please run the same checks used by CI:
+Run the same checks used by CI:
 
 ```bash
 make check
@@ -88,12 +70,13 @@ This includes Go formatting/module checks, WASM compilation, vet, Go tests,
 the Node.js browser tests and Go WASM lifecycle tests running in Node.js.
 `make test-js` and `make test-wasm` provide focused runs; still run `make check`
 before opening a pull request. Module-resolution regressions use offline proxy
-fixtures to compare the browser resolver's selected versions with the Go toolchain.
+fixtures to compare the browser resolver's selected versions with `go list`.
+Keep these Go reference tests even though the production app is static-only.
 
 ## Project Notes
 
 - Keep changes focused and consistent with the existing small-Go-app structure.
-- Server and WASM version parsing and precedence share `internal/semver`; keep numeric comparisons independent of machine integer limits.
+- Version parsing and precedence use `internal/semver`; keep numeric comparisons independent of machine integer limits.
 - Keep `dist/` out of version control; CI and the Pages workflow generate it with `make wasm`.
-- The browser UI intentionally avoids an npm build step. All browser sources live under `internal/app/web/static`; both page shells use the Go template.
-- Remote module analysis shells out to the Go toolchain, so include clear reproduction targets for bugs involving module resolution.
+- The HTML shell is plain static HTML. Browser sources live under `internal/app/web/static/`.
+- Include exact public module targets for bugs involving module resolution.

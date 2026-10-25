@@ -3,7 +3,6 @@
 Select **Go requirements** (`Go`) after loading a public module, or open:
 
 ```text
-http://localhost:8080/?lens=go-requirements#target=github.com%2Fspf13%2Fcobra%40v1.10.2
 http://localhost:4173/?lens=go-requirements#target=github.com%2Fspf13%2Fcobra%40v1.10.2
 ```
 
@@ -61,7 +60,7 @@ or version resets them. Refresh retries metadata requests. See
 
 ## Reproduction and checks
 
-1. Load either example URL above. The default view shows version groups and
+1. Load the example URL above. The default view shows version groups and
    the module table. Open **Module details** to inspect the exact-version source.
 2. Open **Compare toolchain** and compare `1.16.0` with `1.27.3`. Results should change
    without refetching metadata or changing version colors. Try a malformed
@@ -69,7 +68,7 @@ or version resets them. Refresh retries metadata requests. See
 3. Click **Highest observed**, choose a dependency, and expand its dependency
    path. Switch to another lens and back; the chosen target remains.
 4. Select another root version; the target resets and the inventory reloads.
-   Check the target form and table on a narrow screen in both deployments.
+   Check the target form and table on a narrow screen.
 
 ```sh
 node --test tests/go-requirements.test.mjs tests/analysis-public-data.test.mjs

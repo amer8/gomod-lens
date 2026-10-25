@@ -2,13 +2,13 @@
 
 GO ?= go
 NODE ?= node
-PORT ?= 8080
+PORT ?= 4173
 GOCACHE ?= $(CURDIR)/.gocache
 GOMODCACHE ?= $(CURDIR)/.gomodcache
 
 GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE)
 GO_PACKAGES := ./...
-GO_SOURCE_DIRS := main.go internal cmd
+GO_SOURCE_DIRS := internal cmd
 
 .PHONY: help cache-dirs run test test-js test-wasm vet vet-wasm fmt fmt-check tidy-check wasm serve check clean new-lens
 
@@ -18,8 +18,7 @@ help: ## Show available targets.
 cache-dirs:
 	@mkdir -p "$(GOCACHE)" "$(GOMODCACHE)"
 
-run: cache-dirs ## Run the development server on PORT, default 8080.
-	$(GO_ENV) $(GO) run . -port $(PORT)
+run: serve ## Build and preview the static application.
 
 test: cache-dirs ## Run all Go tests with repo-local caches.
 	$(GO_ENV) $(GO) test $(GO_PACKAGES)
@@ -52,8 +51,8 @@ tidy-check: cache-dirs ## Verify go.mod and go.sum are tidy.
 wasm: cache-dirs ## Generate the complete static deployment in dist/.
 	$(GO_ENV) $(GO) run ./cmd/build-static-wasm -go "$(GO)"
 
-serve: wasm ## Build and serve the static deployment on port 4173.
-	$(GO_ENV) $(GO) run ./cmd/serve-dist
+serve: wasm ## Build and serve the static deployment on PORT, default 4173.
+	$(GO_ENV) $(GO) run ./cmd/serve-dist -port $(PORT)
 
 check: fmt-check tidy-check wasm vet vet-wasm test test-js test-wasm ## Run the same checks used by CI.
 

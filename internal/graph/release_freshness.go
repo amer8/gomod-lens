@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"context"
 	"sort"
 	"strings"
 
@@ -21,11 +20,6 @@ const (
 	ReleaseFreshnessStatusError         = "error"
 )
 
-// ReleaseFreshnessProvider fetches latest release data for graph nodes.
-type ReleaseFreshnessProvider interface {
-	FetchReleaseFreshness(ctx context.Context, deps []ReleaseFreshnessRequest) map[string]ReleaseFreshnessInfo
-}
-
 // ReleaseFreshnessRequest identifies one module version to classify.
 type ReleaseFreshnessRequest struct {
 	ID      string
@@ -40,27 +34,6 @@ type ReleaseFreshnessInfo struct {
 	LatestVersion string
 	Status        string
 	Message       string
-}
-
-// ReleaseFreshnessLens applies latest-release freshness data to graph nodes.
-type ReleaseFreshnessLens struct {
-	provider ReleaseFreshnessProvider
-}
-
-// NewReleaseFreshnessLens creates the built-in release freshness lens.
-func NewReleaseFreshnessLens(provider ReleaseFreshnessProvider) *ReleaseFreshnessLens {
-	return &ReleaseFreshnessLens{provider: provider}
-}
-
-// Definition returns metadata for the release freshness lens.
-func (l *ReleaseFreshnessLens) Definition() LensDefinition {
-	return ReleaseFreshnessLensDefinition()
-}
-
-// Analyze enriches graph nodes with release freshness results.
-func (l *ReleaseFreshnessLens) Analyze(ctx context.Context, graph *Graph) error {
-	applyReleaseFreshnessLens(ctx, graph, l.provider)
-	return nil
 }
 
 // SetNodeReleaseFreshness records release freshness data on the generic lens map.
@@ -265,54 +238,6 @@ func LatestStableModuleVersion(versionList string) string {
 		return versions[0]
 	}
 	return ""
-}
-
-func applyReleaseFreshnessLens(ctx context.Context, graph *Graph, provider ReleaseFreshnessProvider) {
-	if graph == nil {
-		return
-	}
-
-	requests := make([]ReleaseFreshnessRequest, 0, len(graph.Nodes))
-	for i := range graph.Nodes {
-		request, skipped := ReleaseFreshnessRequestForNode(graph.Nodes[i])
-		if skipped != nil {
-			SetNodeReleaseFreshness(&graph.Nodes[i], skipped)
-			continue
-		}
-		requests = append(requests, request)
-	}
-
-	if provider == nil {
-		for i := range graph.Nodes {
-			if ReleaseFreshnessForNode(graph.Nodes[i]) != nil {
-				continue
-			}
-			SetNodeReleaseFreshness(&graph.Nodes[i], &ReleaseFreshnessInfo{
-				Module:  graph.Nodes[i].Name,
-				Version: graph.Nodes[i].Version,
-				Status:  ReleaseFreshnessStatusError,
-				Message: "release freshness provider is unavailable",
-			})
-		}
-		return
-	}
-
-	results := provider.FetchReleaseFreshness(ctx, requests)
-	for i := range graph.Nodes {
-		if ReleaseFreshnessForNode(graph.Nodes[i]) != nil {
-			continue
-		}
-		if info, ok := results[graph.Nodes[i].ID]; ok {
-			SetNodeReleaseFreshness(&graph.Nodes[i], &info)
-			continue
-		}
-		SetNodeReleaseFreshness(&graph.Nodes[i], &ReleaseFreshnessInfo{
-			Module:  graph.Nodes[i].Name,
-			Version: graph.Nodes[i].Version,
-			Status:  ReleaseFreshnessStatusError,
-			Message: "release freshness was not returned",
-		})
-	}
 }
 
 func releaseFreshnessScore(status string) *float64 {

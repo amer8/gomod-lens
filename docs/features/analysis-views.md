@@ -1,6 +1,6 @@
 # Browser analysis views
 
-The Go web UI and static WebAssembly UI share five analysis lenses:
+The static WebAssembly application provides five analysis lenses:
 
 | Lens query | Design | Interaction |
 | --- | --- | --- |
@@ -13,15 +13,14 @@ The Go web UI and static WebAssembly UI share five analysis lenses:
 Select a lens with the centered toolbar, or link to it directly:
 
 ```text
-http://localhost:8080/?lens=vulnerabilities#target=github.com%2Fgin-gonic%2Fgin%40v1.10.0
+http://localhost:4173/?lens=vulnerabilities#target=github.com%2Fgin-gonic%2Fgin%40v1.10.0
 http://localhost:4173/?lens=licenses#target=github.com%2Fgin-gonic%2Fgin%40v1.10.0
 ```
 
 There is no layout selector. Legacy comparison URLs discard `v`; unsupported
 or removed lens IDs fall back to Scorecard while preserving the module target.
 
-Run `make run` for the Go web UI, or `make wasm` followed by `make serve` for the
-static version. Both deployments ship identical analysis modules and styling.
+Run `make serve` to build and preview the static application.
 Scorecard summary, check search, filters, expandable check evidence, and report
 provenance all appear in the sidebar on desktop and mobile, using its single
 scroll area. The existing Expand panel button provides more room on small screens. The sidebar remains collapsible, with the default-collapsed

@@ -1,7 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createApplication } from '../internal/app/web/static/app-controller.js'
-import * as http from '../internal/app/web/static/http-client.js'
 import { renderSidebar, renderDistribution } from '../internal/app/web/static/sidebar-view.js'
 
 const flush = () => new Promise(setImmediate)
@@ -93,7 +92,7 @@ test('Back restores module targets on popstate and a following hashchange does n
   assert.equal(app.graphRequests.length, 2)
 })
 
-test('invalid graph data uses the same error UI for either transport', async t => {
+test('invalid graph data uses the graph error UI', async t => {
   const app = fixture(t)
   app.window.location.hash = 'target=example.org%2Fmod'; await flush()
   app.resolve(app.graphRequests[0], undefined, { meta: { lenses: [{ id: 'openssf' }] } }); await flush()
@@ -161,28 +160,4 @@ test('sidebar summaries preserve navigation, distributions and untrusted text', 
   assert(nodes.some(node => node.textContent === hostile))
   assert(!nodes.some(node => ['img', 'script'].includes(node.tagName)))
   assert(!nodes.some(node => node.dataset.lensPanelTarget || node.dataset.lensPanel))
-})
-
-test('HTTP client decodes graph JSON, errors and search results with cancellation', async t => {
-  const payload = { nodes: [{ id: 'root' }] }, signal = new AbortController().signal
-  t.mock.method(globalThis, 'fetch', async (url, options) => {
-    assert.equal(options.signal, signal); assert.equal(options.credentials, 'omit')
-    if (url.startsWith('/api/graph?')) {
-      assert.equal(new URL(url, 'https://app.test').searchParams.get('target'), 'example.org/mod@v1.0.0+incompatible')
-      return Response.json(payload)
-    }
-    assert.equal(new URL(url, 'https://app.test').searchParams.get('q'), 'a/b')
-    return { ok: true, json: async () => ({ results: [{ path: 'example.org/module' }] }) }
-  })
-  assert.deepEqual(await http.loadGraph('example.org/mod@v1.0.0+incompatible', { signal }), payload)
-  assert.deepEqual(await http.searchModules('a/b', 6, signal), [{ path: 'example.org/module' }])
-  t.mock.method(globalThis, 'fetch', async () => Response.json({ error: 'retry shortly' }, { status: 429 }))
-  await assert.rejects(http.loadGraph('module'), /retry shortly/)
-  t.mock.method(globalThis, 'fetch', async () => new Response('upstream failed', { status: 502 }))
-  await assert.rejects(http.loadGraph('module'), /HTTP 502/)
-  t.mock.method(globalThis, 'fetch', async () => new Response('invalid JSON'))
-  await assert.rejects(http.loadGraph('module'), /did not include data/)
-  const controller = new AbortController()
-  t.mock.method(globalThis, 'fetch', async () => ({ ok: true, json: async () => { controller.abort(); return payload } }))
-  await assert.rejects(http.loadGraph('module', { signal: controller.signal }), { name: 'AbortError' })
 })

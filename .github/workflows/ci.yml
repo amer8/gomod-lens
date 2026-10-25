@@ -39,7 +39,7 @@ jobs:
 
       - name: Check formatting
         run: |
-          unformatted="$(gofmt -l main.go internal cmd)"
+          unformatted="$(gofmt -l internal cmd)"
           if [ -n "$unformatted" ]; then
             echo "$unformatted"
             exit 1

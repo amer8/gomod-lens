@@ -2,8 +2,7 @@
   <img src="docs/assets/gopher-63.svg" width="180" alt="go.mod Lens gopher mascot">
 </p>
 
-`gomod-lens` explores public Go module dependency graphs in a browser. It can
-run as a Go web server or as a static WebAssembly build, and analyzes modules
+`gomod-lens` explores public Go module dependency graphs in a browser. It runs as a static WebAssembly application and analyzes modules
 through five browser lenses: OpenSSF Scorecard, Release Freshness,
 Vulnerability exposure, License evidence and Go requirements.
 
@@ -13,8 +12,7 @@ After a public module loads, the version selector shows the loaded version,
 marks the latest version reported by the Go module proxy, and lets you switch
 to older published versions. The search field keeps the module path; Analyze
 preserves the selected version for that module. Explicit `module@version`
-input and shared URLs still work. This is available in both the Go web UI
-and the static WebAssembly build.
+input and shared URLs still work.
 
 ## Lenses
 
@@ -31,7 +29,7 @@ not maintenance or security scores. See the
 Go graph enrichment supplies Scorecard summaries and release freshness in the
 graph payload. The browser adds Scorecard check details, vulnerability matches,
 license evidence and Go requirements when those views are opened. These browser
-observations are not included in `/api/graph`.
+observations stay in browser memory rather than the initial graph payload.
 
 The **Graph assistant** adds a collapsible chat dock with three contextual
 starter questions and three follow-ups after each answer. It connects answers
@@ -62,10 +60,13 @@ Run `make help` for the full target list.
 Development requires Go 1.26+ and Node.js 22+ for tests, without an npm build.
 `make check` builds the static deployment and runs Go/WASM and browser tests.
 
-Both deployments share one JavaScript controller, sidebar renderer and Go page
-template. The server client fetches JSON from `/api/graph`; the static client
-resolves the same graph and sidebar response with WASM. `dist/` is generated and ignored; edit browser sources in
-`internal/app/web/static/` and rebuild with `make wasm` or `make serve`.
+The browser resolves graphs and sidebar summaries with Go/WASM, fetching public
+data directly from upstream APIs. There is no application backend or HTTP API.
+`dist/` is generated and ignored; edit the page shell in
+`internal/app/web/index.html` and browser sources in `internal/app/web/static/`,
+then rebuild with `make wasm` or preview with `make serve` (port 4173).
+`make run` is an alias for the same static preview. Existing HTTP API consumers
+must migrate; `/api/graph`, `/api/modules/search` and `/api/health` are removed.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
 

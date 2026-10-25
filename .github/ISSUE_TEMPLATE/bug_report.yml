@@ -18,7 +18,7 @@ body:
       description: Include the module target, command, or browser action that triggers the issue.
       placeholder: |
         1. Run `go run .`
-        2. Open `http://localhost:8080/#target=golang.org%2Fx%2Ftools%40latest`
+        2. Open `http://localhost:4173/#target=golang.org%2Fx%2Ftools%40latest`
         3. ...
     validations:
       required: true

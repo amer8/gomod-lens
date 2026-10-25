@@ -1,6 +1,6 @@
 # License evidence
 
-Available in both the Go server Web UI and static WebAssembly build.
+Available in the static WebAssembly application.
 
 Select the **§** lens after loading a public module. Choose a graph node or module, search names or license expressions, and filter identifiers, non-standard results or unknowns. Each selected version shows its observed expressions, source link and timestamp. Highlight unknowns focuses gaps in the graph.
 

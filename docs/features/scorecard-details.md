@@ -1,6 +1,6 @@
 # Scorecard details
 
-Available in both the Go server Web UI and static WebAssembly build. Select the
+Available in the static WebAssembly application. Select the
 existing Scorecard lens, then choose a graph node or use **Module to inspect**.
 The sidebar contains the summary followed by **Repository checks**. Search checks,
 filter unavailable or low scores, and expand a check for its explanation, evidence

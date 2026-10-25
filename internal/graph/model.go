@@ -1,13 +1,6 @@
 package graph
 
 const (
-	// ModeAuto lets the analyzer choose local or module analysis from the target.
-	ModeAuto = "auto"
-	// ModeLocal analyzes a local module or workspace path.
-	ModeLocal = "local"
-	// ModeModule analyzes a public module path resolved through Go tooling.
-	ModeModule = "module"
-
 	// LensOpenSSF identifies the built-in OpenSSF Scorecard lens.
 	LensOpenSSF = "openssf"
 	// LensReleaseFreshness identifies the built-in release freshness lens.
@@ -18,12 +11,6 @@ const (
 	// Deprecated: use LensOpenSSF and GraphMeta.Lenses for new lens-aware code.
 	OverlayOpenSSF = "openssf"
 )
-
-// Request describes the dependency graph analysis to run.
-type Request struct {
-	Target string
-	Mode   string
-}
 
 // Graph is the dependency graph and summary metadata returned by analysis.
 type Graph struct {

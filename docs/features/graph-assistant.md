@@ -290,7 +290,7 @@ Run `make check`. `tests/graph-assistant.test.mjs` covers graph cycles/shared
 dependencies, unknown evidence, replacement identities, fixed-version scope,
 suggestions, plan validation, worker cancellation, and model-required gating.
 
-For manual checks, load `github.com/gin-gonic/gin@v1.10.0` in both deployments.
+For manual checks, load `github.com/gin-gonic/gin@v1.10.0` in the static application.
 Open the assistant, load the model, ask about advisory matches, highlight the matches, select a
 module, and follow a path question. Change to v1.9.1 during a pending answer:
 the old request must stop and its graph actions must become unavailable. Try

@@ -1,4 +1,4 @@
-// Package modulesearch defines the search rules shared by the server and WASM resolver.
+// Package modulesearch defines module search rules for the browser resolver.
 package modulesearch
 
 import (
@@ -27,7 +27,7 @@ func GitHubQuery(query string) url.Values {
 	return url.Values{"q": {query + " " + scope}, "sort": {"stars"}, "order": {"desc"}, "per_page": {"25"}}
 }
 
-// GitHubResponse is the repository search payload used by both transports.
+// GitHubResponse is the repository search payload returned by GitHub.
 type GitHubResponse struct {
 	Items []struct {
 		FullName    string `json:"full_name"`

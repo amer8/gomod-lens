@@ -19,11 +19,9 @@ Helpful reports include:
 
 ## Deployment Note
 
-The Go server shells out to the Go toolchain and resolves remote modules. Avoid
-exposing an unauthenticated server instance to the public internet without
-additional request limits, network controls, and hardening.
-
-The static GitHub Pages build does not run the Go toolchain on a server, but it
-does send public module paths and versions from the visitor's browser to the Go
-module mirror, deps.dev, and GitHub Search. Do not use either deployment mode
-with private module paths or other sensitive identifiers.
+The application runs as static HTML, JavaScript and Go/WASM. It has no
+application backend and does not run the Go toolchain on a server. It sends
+public module paths and versions from the visitor's browser to the Go module
+mirror, deps.dev, OSV and GitHub Search. Do not enter private module paths or
+other sensitive identifiers. See [PRIVACY.md](PRIVACY.md) for external requests
+and browser caching.
