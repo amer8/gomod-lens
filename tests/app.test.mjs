@@ -16,8 +16,9 @@ function fixture(t) {
     replaceWith(node) { ids.set(this.id, node) }
     setAttribute(name, value) { this.attributes.set(name, value) }
     removeAttribute(name) { this.attributes.delete(name) }
-    querySelector(selector) { return selector === '.control-stack' ? this.stack : null }
-    querySelectorAll() { return this.children.filter(node => node.dataset?.moduleSuggestion !== undefined) }
+    focus() { this.focused = true }
+    querySelector(selector) { return selector === '.control-stack' ? this.stack : this.parts?.[selector] || null }
+    querySelectorAll(selector) { return this.children.filter(node => selector === '[data-loading-step]' ? node.dataset.loadingStep !== undefined : node.dataset?.moduleSuggestion !== undefined) }
   }
   const document = new EventTarget()
   document.getElementById = id => ids.get(id)
@@ -25,7 +26,14 @@ function fixture(t) {
   document.createTextNode = textContent => Object.assign(new Element(), { textContent })
   document.querySelector = () => null
   document.querySelectorAll = () => []
-  for (const id of ['search-form', 'module-target', 'analyze-button', 'graph-progress', 'loading-progress', 'graph-errors', 'error-message', 'graph-canvas', 'graph-result', 'left-panel', 'navbar-component']) ids.set(id, new Element(id))
+  for (const id of ['search-form', 'module-target', 'analyze-button', 'graph-progress', 'graph-loading-target', 'graph-loading-status', 'graph-loading-wait', 'cancel-graph-loading', 'graph-errors', 'error-message', 'graph-canvas', 'graph-result', 'left-panel', 'navbar-component']) ids.set(id, new Element(id))
+  ids.get('graph-progress').parts = Object.fromEntries(['graph-loading-target', 'graph-loading-status', 'graph-loading-wait'].map(id => ['#' + id, ids.get(id)]))
+  for (let index = 0; index < 5; index++) {
+    const step = new Element()
+    step.dataset.loadingStep = ''
+    step.parts = Object.fromEntries(['graph-loading-marker', 'graph-loading-detail', 'graph-loading-step-status'].map(name => ['.' + name, new Element()]))
+    ids.get('graph-progress').append(step)
+  }
   ids.get('search-form').stack = new Element()
   const window = new EventTarget()
   let hash = '', timer = 0
@@ -129,12 +137,85 @@ test('superseded graph requests cannot overwrite current progress, results or er
   app.input('example.org/new'); app.submit(); await flush()
   const [old, current] = app.graphRequests
   assert.equal(old.options.signal.aborted, true)
-  current.options.onProgress({ value: 25 }); old.options.onProgress({ value: 90 })
-  assert.equal(app.ids.get('loading-progress').textContent, ' 25%')
+  current.options.onProgress({ value: 25, label: 'Resolving dependencies' }); old.options.onProgress({ value: 90, label: 'Applying OpenSSF lens' })
+  assert.equal(app.ids.get('graph-loading-status').textContent, 'Resolving dependencies')
+  assert.equal(app.ids.get('graph-progress').children[1].attributes.get('aria-current'), 'step')
   app.resolve(current); await flush()
   old.reject(new Error('late failure')); await flush()
   assert.equal(app.rendered.length, 1)
   assert.equal(app.ids.get('graph-errors').hidden, true)
+})
+
+test('guided loading follows resolver stages and stays active during final release checks', async t => {
+  const app = fixture(t)
+  app.input('example.org/mod@v1.2.3'); app.submit(); await flush()
+  const progress = app.ids.get('graph-progress'), steps = progress.children
+  const request = app.graphRequests[0]
+  assert.equal(app.ids.get('graph-loading-target').textContent, 'example.org/mod@v1.2.3')
+  assert.equal(app.ids.get('graph-loading-status').textContent, 'Preparing analyzer…')
+  assert.equal(app.ids.get('search-form').hidden, true)
+  assert.equal(app.ids.get('module-target').disabled, true)
+  assert(app.ids.get('left-panel').classes.has('is-loading'))
+  assert(steps.every(step => step.dataset.state === 'pending'))
+
+  for (const [index, report] of [
+    [0, { value: 4, label: 'Resolving module' }],
+    [1, { value: 18, label: 'Resolving dependencies' }],
+    [2, { value: 78, label: 'Building graph' }],
+    [3, { label: 'Applying OpenSSF lens' }],
+    [4, { value: 99, label: 'Applying Release Freshness lens' }],
+  ]) {
+    request.options.onProgress(report)
+    assert(steps.slice(0, index).every(step => step.dataset.state === 'complete'))
+    assert.equal(steps[index].dataset.state, 'active')
+    assert.equal(steps[index].attributes.get('aria-current'), 'step')
+    assert(steps.slice(index + 1).every(step => step.dataset.state === 'pending'))
+    assert.equal(progress.hidden, false)
+  }
+  assert.equal(app.ids.get('graph-loading-status').textContent, 'Checking release freshness')
+  assert.equal(app.rendered.length, 0, '99% must not imply that a graph is ready')
+  request.options.onProgress({ value: 100, label: 'Done' })
+  assert(steps.every(step => step.dataset.state === 'complete'))
+  assert.equal(app.ids.get('graph-loading-status').textContent, 'Preparing visualization…')
+  assert.equal(progress.hidden, false, 'wait for the graph payload before leaving the loading view')
+  app.resolve(request); await flush()
+  assert.equal(progress.hidden, true)
+  assert.equal(app.ids.get('search-form').hidden, false)
+  assert.equal(app.ids.get('module-target').disabled, false)
+  assert(!app.ids.get('left-panel').classes.has('is-loading'))
+})
+
+test('a longer stage shows a wait message and changing stages or canceling clears it', async t => {
+  const app = fixture(t)
+  app.input('example.org/mod'); app.submit(); await flush()
+  const request = app.graphRequests[0], wait = app.ids.get('graph-loading-wait')
+  request.options.onProgress({ value: 90, label: 'Applying OpenSSF lens' })
+  assert.equal(wait.hidden, true)
+  app.tick()
+  assert.equal(wait.hidden, false)
+  request.options.onProgress({ value: 95, label: 'Applying OpenSSF lens' })
+  assert.equal(wait.hidden, false, 'incremental progress within one stage should not hide the message')
+  request.options.onProgress({ value: 98, label: 'Applying Release Freshness lens' })
+  assert.equal(wait.hidden, true)
+  app.ids.get('cancel-graph-loading').dispatchEvent(event('click'))
+  assert.equal(request.options.signal.aborted, true)
+  assert.equal(app.ids.get('graph-progress').hidden, true)
+  assert.equal(app.ids.get('graph-result').dataset.state, 'empty')
+  assert.equal(app.ids.get('module-target').value, 'example.org/mod')
+  assert.equal(app.ids.get('module-target').focused, true)
+  assert.equal(app.ids.get('analyze-button').disabled, false)
+  app.tick()
+  request.options.onProgress({ value: 100, label: 'Done' })
+  app.resolve(request); await flush()
+  assert.equal(wait.hidden, true)
+  assert.equal(app.rendered.length, 0, 'a canceled result must not replace the welcome screen')
+  assert.equal(app.ids.get('graph-errors').hidden, true)
+
+  app.submit(); await flush()
+  assert.equal(app.graphRequests.length, 2, 'the canceled target can be submitted again')
+  assert.equal(app.ids.get('graph-loading-status').textContent, 'Preparing analyzer…')
+  app.resolve(app.graphRequests[1]); await flush()
+  assert.equal(app.rendered.length, 1)
 })
 
 test('sidebar summaries preserve navigation, distributions and untrusted text', t => {

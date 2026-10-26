@@ -1,4 +1,5 @@
 import { renderSidebar } from './sidebar-view.js'
+import { createGraphLoadingView } from './graph-loading.js'
 
 export function createApplication({ client, graphView, createAnalysisViews, createModuleVersionPicker }) {
   const { applyHighlightRequest, setAnalysisColors, clearGraph, renderGraph, selectNode, setGraphLens } = graphView
@@ -10,7 +11,7 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     input: document.getElementById('module-target'),
     button: document.getElementById('analyze-button'),
     progress: document.getElementById('graph-progress'),
-    progressValue: document.getElementById('loading-progress'),
+    cancelLoading: document.getElementById('cancel-graph-loading'),
     errors: document.getElementById('graph-errors'),
     errorMessage: document.getElementById('error-message'),
     graphCanvas: document.getElementById('graph-canvas'),
@@ -27,9 +28,15 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
 
   const versionPicker = createModuleVersionPicker(elements.form, elements.input)
   const analysisViews = createAnalysisViews({selectNode, setGraphLens, setColors:setAnalysisColors, highlight:applyHighlightRequest})
+  const loadingView = createGraphLoadingView(elements.progress)
 
   let graphController = null
   let routedTarget = null
+
+  elements.cancelLoading.addEventListener('click', () => {
+    resetGraph()
+    elements.input.focus()
+  })
 
   setupModuleSuggestions()
 
@@ -189,16 +196,17 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     graphController?.abort()
     const own = graphController = new AbortController()
     versionPicker.loading(); analysisViews.loading(); hideModuleSuggestions()
-    setLoading(true); setLoadingProgress(); setError(''); setGraphLoaded(false)
+    setGraphResult(emptyGraphResult()); clearGraph(elements.graphCanvas)
+    setGraphLoaded(false); setLoading(true, target); setError('')
     try {
       const payload = await client.loadGraph(target, {
         signal: own.signal,
-        onProgress({ value }) { if (graphController === own && !own.signal.aborted) setLoadingProgress(value) },
+        onProgress(progress) { if (graphController === own && !own.signal.aborted) loadingView.update(progress) },
       })
       if (graphController !== own || own.signal.aborted) return
       if (!hasCompleteBuiltInLensData(payload)) throw new Error('Built-in lens data was not included in the graph response')
       syncResolvedTarget(payload?.meta?.target || target)
-      setLoadingProgress(100); setGraphResult(renderSidebar(payload))
+      loadingView.update({ value: 100 }); setGraphResult(renderSidebar(payload))
       renderGraph(elements.graphCanvas, payload, { onNodeSelected(node) {
         selectNode(node?.id || ''); analysisViews.select(node)
       } })
@@ -250,13 +258,14 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     elements.navbar?.classList.toggle('navbar-component-empty', !value)
   }
 
-  function setLoading(value) {
+  function setLoading(value, target) {
     elements.button.disabled = value
-    elements.progress.hidden = !value
-  }
-
-  function setLoadingProgress(value) {
-    elements.progressValue.textContent = Number.isFinite(value) ? ` ${Math.max(0, Math.min(100, Math.round(value)))}%` : ''
+    elements.input.disabled = value
+    elements.form.hidden = value
+    elements.leftPanel?.classList.toggle('is-loading', value)
+    elements.graphCanvas?.setAttribute('aria-busy', String(value))
+    if (value) loadingView.show(target)
+    else loadingView.hide()
   }
 
   function setError(message) {

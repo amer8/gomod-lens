@@ -45,9 +45,27 @@
               </div>
             </div>
           </form>
-          <div id="graph-progress" class="graph-progress compact" hidden>
-            <h4>Resolving graph<span id="loading-progress"></span>..</h4>
-          </div>
+          <section id="graph-progress" class="graph-progress" aria-labelledby="graph-loading-heading" hidden>
+            <p class="welcome-brand">go.mod Lens</p>
+            <p class="graph-loading-eyebrow">Preparing your graph</p>
+            <h1 id="graph-loading-heading">Your dependencies,<br>coming into focus.</h1>
+            <p class="graph-loading-module">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m12 3 9 5v9l-9 5-9-5V8l9-5Zm0 10 9-5M12 13 3 8m9 5v9M7.5 5.5l9 5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path></svg>
+              <code id="graph-loading-target"></code>
+            </p>
+            <ol class="graph-loading-steps" aria-label="Analysis stages">
+              <li data-loading-step><span class="graph-loading-marker" aria-hidden="true">1</span><div class="graph-loading-step-copy"><strong>Read module</strong><span class="graph-loading-detail"></span></div><span class="graph-loading-step-status"></span></li>
+              <li data-loading-step><span class="graph-loading-marker" aria-hidden="true">2</span><div class="graph-loading-step-copy"><strong>Resolve dependencies</strong><span class="graph-loading-detail"></span></div><span class="graph-loading-step-status"></span></li>
+              <li data-loading-step><span class="graph-loading-marker" aria-hidden="true">3</span><div class="graph-loading-step-copy"><strong>Build graph</strong><span class="graph-loading-detail"></span></div><span class="graph-loading-step-status"></span></li>
+              <li data-loading-step><span class="graph-loading-marker" aria-hidden="true">4</span><div class="graph-loading-step-copy"><strong>Check security practices</strong><span class="graph-loading-detail"></span></div><span class="graph-loading-step-status"></span></li>
+              <li data-loading-step><span class="graph-loading-marker" aria-hidden="true">5</span><div class="graph-loading-step-copy"><strong>Check release freshness</strong><span class="graph-loading-detail"></span></div><span class="graph-loading-step-status"></span></li>
+            </ol>
+            <div class="graph-loading-footer">
+              <p id="graph-loading-status" class="graph-loading-status" role="status">Preparing analyzer…</p>
+              <button id="cancel-graph-loading" class="graph-loading-cancel" type="button">Cancel</button>
+            </div>
+            <p id="graph-loading-wait" class="graph-loading-wait" hidden>This step is taking longer. You can keep waiting or cancel.</p>
+          </section>
           <div id="graph-errors" class="graph-errors compact" hidden>
             <h4>Graph build failed</h4>
             <div id="error-message" class="error-message"></div>
