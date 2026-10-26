@@ -5,7 +5,7 @@ import { publicIdentity, versionURL } from '../analysis/public-data.js'
 // Repository links come from observed project mappings. A GitHub module-path
 // fallback is explicitly marked as an inference, never a verified mapping.
 export function repositoryFor(node) {
-  const project = node?.openssf?.projectId || node?.lenses?.openssf?.details?.projectId
+  const project = node?.lenses?.openssf?.details?.projectId
   const valid = value => typeof value === 'string' && /^(github\.com|gitlab\.com|bitbucket\.org|codeberg\.org)\/[\w.-]+(?:\/[\w.-]+)+$/.test(value) && value.split('/').every(part => part !== '.' && part !== '..')
   if (valid(project)) return { url: 'https://' + project, project, inferred: false }
   const name = publicIdentity(node)?.name

@@ -9,7 +9,6 @@
  * @property {boolean} [replaced]
  * @property {string} [replacement] Resolved name@version, or a local path.
  * @property {Object<string, {status: string, score?: number, message?: string, details?: Object<string, string>}>} [lenses]
- * @property {{projectId?: string}} [openssf] Legacy Scorecard compatibility data.
  */
 
 /**

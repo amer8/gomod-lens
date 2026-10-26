@@ -19,7 +19,7 @@ export function normalizeReport(project, source, fetchedAt = new Date().toISOStr
   }
 }
 export async function loadReport(node, { signal, fetcher } = {}) {
-  const project = node?.openssf?.projectId || node?.lenses?.openssf?.details?.projectId
+  const project = node?.lenses?.openssf?.details?.projectId
   if (!project) return { missing: true, checks: [], message: 'No source repository mapping is available for this module.' }
   const source = 'https://api.deps.dev/v3/projects/' + encodeURIComponent(project)
   return normalizeReport(await publicJSON(source, { signal, fetcher }), source)

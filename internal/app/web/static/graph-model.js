@@ -7,7 +7,7 @@ const unknown = '#8b95a7', dimmed = '#50586a'
 export function lensColor(node, lens, colors) {
   if (colors) return colors[node.id] || unknown
   if (lens === 'release-freshness') return freshnessColors[node.lenses?.[lens]?.status] || unknown
-  const score = node.lenses?.openssf || node.openssf
+  const score = node.lenses?.openssf
   if (!score) return unknown
   if (score.status === 'error') return '#e5a15a'
   if (score.status === 'no_scorecard') return '#b985ff'

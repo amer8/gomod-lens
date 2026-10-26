@@ -9,7 +9,7 @@ export function suggestionKey(topic, nodeID, filter) {
 
 export function evidenceGaps(graph, evidence = {}) {
   return graph.nodes.filter(node => freshnessRecord(node).status === 'unknown' ||
-    (node.lenses?.openssf?.status || node.openssf?.status) !== 'found' ||
+    node.lenses?.openssf?.status !== 'found' ||
     (evidence.vulnerabilities && !['matched', 'clear'].includes(evidence.vulnerabilities.records?.get(node.id)?.status)) ||
     (evidence.licenses && !hasLicenseEvidence(evidence.licenses.records?.get(node.id))))
 }
@@ -89,7 +89,7 @@ export function suggestedQuestions(context, { topics, asked = [], after = '', ev
   if (rare) add('licenses', `Which ${rare[1] === 1 ? 'dependency uses' : 'modules use'} ${rare[0]}?`, 'licenses', after === 'licenses' ? 95 : 44, { licenseQuery: { ids: [rare[0]], mode: 'any' } })
   if (checks && lowChecks.length) add('scorecard', `Which ${lowChecks.length === 1 ? 'repository check needs' : lowChecks.length + ' repository checks need'} a closer look?`, 'repository', 80)
   else if (!report) add('scorecard', `Does ${selected.name} have repository checks to review?`, 'repository', 50)
-  if (gaps.length && (vulnerabilityUnknown.length || nodes.some(node => freshnessRecord(node).status === 'unknown' || (node.lenses?.openssf?.status || node.openssf?.status) !== 'found'))) add('unknown', `Which ${gaps.length === 1 ? 'module has' : gaps.length + ' modules have'} incomplete observations?`, 'evidence', 58)
+  if (gaps.length && (vulnerabilityUnknown.length || nodes.some(node => freshnessRecord(node).status === 'unknown' || node.lenses?.openssf?.status !== 'found'))) add('unknown', `Which ${gaps.length === 1 ? 'module has' : gaps.length + ' modules have'} incomplete observations?`, 'evidence', 58)
 
   // Trace a relevant dependency instead of asking for the root's path to itself.
   const reachable = new Set([graph.rootId]), queue = [graph.rootId], outgoing = new Map()

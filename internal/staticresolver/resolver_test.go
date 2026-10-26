@@ -70,9 +70,6 @@ func TestResolveGraphBuildsBrowserGraph(t *testing.T) {
 	if transitive.Direct {
 		t.Fatal("transitive dependency was marked direct")
 	}
-	if transitive.OpenSSF == nil || transitive.OpenSSF.Status != "no_project" {
-		t.Fatalf("transitive OpenSSF status = %#v, want no_project", transitive.OpenSSF)
-	}
 	if got, ok := transitive.LensResult(graph.LensOpenSSF); !ok || got.Status != "no_project" {
 		t.Fatalf("transitive OpenSSF lens result = %+v, ok = %v", got, ok)
 	}

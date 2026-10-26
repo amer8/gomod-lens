@@ -27,9 +27,6 @@ func (m *GraphMeta) AddLens(def LensDefinition) {
 	if def.ID == "" {
 		return
 	}
-	if def.ID == LensOpenSSF {
-		m.Overlay = OverlayOpenSSF
-	}
 	for i := range m.Lenses {
 		if m.Lenses[i].ID == def.ID {
 			m.Lenses[i] = def
@@ -61,13 +58,11 @@ func (n Node) LensResult(lensID string) (LensResult, bool) {
 	return result, ok
 }
 
-// SetNodeOpenSSFScore records OpenSSF Scorecard data on both the compatibility
-// OpenSSF field and the generic lens result map.
+// SetNodeOpenSSFScore records OpenSSF Scorecard data in the node's lens map.
 func SetNodeOpenSSFScore(node *Node, score *OpenSSFScore) {
 	if node == nil {
 		return
 	}
-	node.OpenSSF = score
 	if score == nil {
 		if node.Lenses != nil {
 			delete(node.Lenses, LensOpenSSF)
@@ -77,12 +72,8 @@ func SetNodeOpenSSFScore(node *Node, score *OpenSSFScore) {
 	node.SetLensResult(LensOpenSSF, score.LensResult())
 }
 
-// OpenSSFScoreForNode returns the OpenSSF score attached to a node, including
-// results stored only through the generic lens map.
+// OpenSSFScoreForNode returns a typed view of the node's OpenSSF lens result.
 func OpenSSFScoreForNode(node Node) *OpenSSFScore {
-	if node.OpenSSF != nil {
-		return node.OpenSSF
-	}
 	result, ok := node.LensResult(LensOpenSSF)
 	if !ok {
 		return nil
@@ -97,9 +88,6 @@ func OpenSSFScoreForNode(node Node) *OpenSSFScore {
 		score.Version = result.Details["version"]
 		score.ProjectID = result.Details["projectId"]
 		score.Date = result.Details["date"]
-		if score.Error == "" {
-			score.Error = result.Details["error"]
-		}
 	}
 	return &score
 }
@@ -123,9 +111,6 @@ func (s OpenSSFScore) LensResult() LensResult {
 	}
 	if s.Date != "" {
 		details["date"] = s.Date
-	}
-	if s.Error != "" {
-		details["error"] = s.Error
 	}
 	if len(details) > 0 {
 		result.Details = details

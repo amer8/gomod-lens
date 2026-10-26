@@ -545,7 +545,6 @@ func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarg
 		Meta: graph.GraphMeta{
 			Mode:      moduleMode,
 			Target:    requestedTarget,
-			Overlay:   graph.OverlayOpenSSF,
 			NodeCount: len(nodes),
 			EdgeCount: len(edges),
 		},

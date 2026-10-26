@@ -113,6 +113,18 @@ test('invalid graph data uses the graph error UI', async t => {
   assert.equal(app.ids.get('graph-errors').hidden, true)
 })
 
+test('built-in lens validation accepts canonical results including a zero Scorecard score', async t => {
+  const app = fixture(t)
+  app.input('example.org/mod'); app.submit(); await flush()
+  const lenses = { openssf: { status: 'found', score: 0 }, 'release-freshness': { status: 'current' } }
+  app.resolve(app.graphRequests[0], undefined, {
+    nodes: [{ id: 'root', lenses }], meta: { lenses: Object.keys(lenses).map(id => ({ id })) },
+  }); await flush()
+  assert.equal(app.rendered.length, 1)
+  assert.deepEqual(app.rendered[0].nodes[0].lenses, lenses)
+  assert.equal(app.ids.get('graph-errors').hidden, true)
+})
+
 test('suggestions reject late results even when the text repeats and keyboard selection loads the module', async t => {
   const app = fixture(t)
   for (const query of ['first', 'second', 'first']) { app.input(query); app.tick() }

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/amer8/gomod-lens/internal/graph"
 	"github.com/amer8/gomod-lens/internal/modproxytest"
 )
 
@@ -69,8 +70,8 @@ func TestRootVersionRemainsPinnedWhenDependenciesRequireAnotherVersion(t *testin
 				if root == nil || !root.Root || !root.Main || root.Version != "v1.0.0" {
 					t.Fatalf("requested root node is missing or changed: %+v", root)
 				}
-				if root.OpenSSF == nil || root.OpenSSF.Version != "v1.0.0" {
-					t.Fatalf("Scorecard lookup used a different root version: %+v", root.OpenSSF)
+				if score := graph.OpenSSFScoreForNode(*root); score == nil || score.Version != "v1.0.0" {
+					t.Fatalf("Scorecard lookup used a different root version: %+v", score)
 				}
 				if len(result.Nodes) != len(want) {
 					t.Fatalf("build lists differ: browser=%+v, Go=%v", result.Nodes, want)

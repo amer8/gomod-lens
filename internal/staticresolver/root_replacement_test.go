@@ -73,8 +73,8 @@ func TestRootReplacementsOnlyApplyToRequiredDependencyVersions(t *testing.T) {
 					if root == nil || !root.Root || !root.Main || root.Replaced || root.Replacement != "" {
 						t.Fatalf("main module was replaced: %+v", root)
 					}
-					if root.OpenSSF == nil || root.OpenSSF.Module != "example.org/root" || root.OpenSSF.Version != "v1.0.0" {
-						t.Fatalf("Scorecard lookup did not use the main module: %+v", root.OpenSSF)
+					if score := graph.OpenSSFScoreForNode(*root); score == nil || score.Module != "example.org/root" || score.Version != "v1.0.0" {
+						t.Fatalf("Scorecard lookup did not use the main module: %+v", score)
 					}
 					freshnessRequest, skipped := graph.ReleaseFreshnessRequestForNode(*root)
 					if skipped != nil || freshnessRequest.Module != "example.org/root" || freshnessRequest.Version != "v1.0.0" {

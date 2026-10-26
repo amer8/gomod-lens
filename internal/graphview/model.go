@@ -151,9 +151,9 @@ func OpenSSFGroups(g graph.Graph) []GroupEntry {
 	}
 
 	for _, node := range g.Nodes {
-		info := graph.OpenSSFScoreForNode(node)
+		info, ok := node.LensResult(graph.LensOpenSSF)
 		switch {
-		case info == nil:
+		case !ok:
 			buckets[6].IDs = append(buckets[6].IDs, node.ID)
 		case info.Status == "error":
 			buckets[7].IDs = append(buckets[7].IDs, node.ID)

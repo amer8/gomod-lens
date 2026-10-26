@@ -5,11 +5,6 @@ const (
 	LensOpenSSF = "openssf"
 	// LensReleaseFreshness identifies the built-in release freshness lens.
 	LensReleaseFreshness = "release-freshness"
-
-	// OverlayOpenSSF marks graphs enriched with OpenSSF Scorecard data.
-	//
-	// Deprecated: use LensOpenSSF and GraphMeta.Lenses for new lens-aware code.
-	OverlayOpenSSF = "openssf"
 )
 
 // Graph is the dependency graph and summary metadata returned by analysis.
@@ -25,7 +20,6 @@ type Graph struct {
 type GraphMeta struct {
 	Mode      string           `json:"mode"`
 	Target    string           `json:"target"`
-	Overlay   string           `json:"overlay,omitempty"`
 	Lenses    []LensDefinition `json:"lenses,omitempty"`
 	NodeCount int              `json:"nodeCount"`
 	EdgeCount int              `json:"edgeCount"`
@@ -33,18 +27,17 @@ type GraphMeta struct {
 
 // Node represents a module version in the dependency graph.
 type Node struct {
-	ID          string        `json:"id"`
-	Name        string        `json:"name"`
-	Version     string        `json:"version,omitempty"`
-	Root        bool          `json:"root"`
-	Main        bool          `json:"main"`
-	Direct      bool          `json:"direct"`
-	Replaced    bool          `json:"replaced"`
-	Replacement string        `json:"replacement,omitempty"`
-	InDegree    int           `json:"inDegree"`
-	OutDegree   int           `json:"outDegree"`
-	Lenses      LensResults   `json:"lenses,omitempty"`
-	OpenSSF     *OpenSSFScore `json:"openssf,omitempty"`
+	ID          string      `json:"id"`
+	Name        string      `json:"name"`
+	Version     string      `json:"version,omitempty"`
+	Root        bool        `json:"root"`
+	Main        bool        `json:"main"`
+	Direct      bool        `json:"direct"`
+	Replaced    bool        `json:"replaced"`
+	Replacement string      `json:"replacement,omitempty"`
+	InDegree    int         `json:"inDegree"`
+	OutDegree   int         `json:"outDegree"`
+	Lenses      LensResults `json:"lenses,omitempty"`
 }
 
 // LensDefinition describes a graph analysis lens available on a graph.

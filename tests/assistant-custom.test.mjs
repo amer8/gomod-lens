@@ -6,7 +6,7 @@ import { answerQuestion, requiredEvidence } from '../internal/app/web/static/ass
 import { LocalAI } from '../internal/app/web/static/assistant/local-ai.js'
 
 const root = { id: 'github.com/gin-gonic/gin@v1.10.0', name: 'github.com/gin-gonic/gin', version: 'v1.10.0', root: true, lenses: { openssf: { details: { projectId: 'github.com/gin-gonic/gin' } } } }
-const net = { id: 'golang.org/x/net@v0.25.0', name: 'golang.org/x/net', version: 'v0.25.0', direct: true, openssf: { projectId: 'github.com/golang/net' } }
+const net = { id: 'golang.org/x/net@v0.25.0', name: 'golang.org/x/net', version: 'v0.25.0', direct: true, lenses: { openssf: { details: { projectId: 'github.com/golang/net' } } } }
 const graph = { rootId: root.id, nodes: [root, net], edges: [{ source: root.id, target: net.id }] }
 const context = { graph, selected: root.id, lens: 'openssf' }
 
@@ -26,7 +26,7 @@ test('repository lookup distinguishes mappings, path inferences, missing data, a
   const nested = { name: 'github.com/acme/repo/submodule/v2', version: 'v2.1.0' }
   assert.deepEqual(repositoryFor(nested), { url: 'https://github.com/acme/repo', project: 'github.com/acme/repo', inferred: true })
   assert.equal(repositoryFor({ name: 'example.org/vanity', version: 'v1.0.0' }), null)
-  assert.equal(repositoryFor({ name: 'example.org/a', version: 'v1.0.0', openssf: { projectId: 'github.com/../../private' } }), null)
+  assert.equal(repositoryFor({ name: 'example.org/a', version: 'v1.0.0', lenses: { openssf: { details: { projectId: 'github.com/../../private' } } } }), null)
   assert.equal(repositoryFor({ name: 'example.org/a', version: 'v1.0.0', replaced: true, replacement: '../local' }), null)
   const fork = { ...nested, replaced: true, replacement: 'github.com/fork/project@v2.1.0' }
   assert.equal(repositoryFor(fork).url, 'https://github.com/fork/project')

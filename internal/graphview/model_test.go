@@ -17,7 +17,7 @@ func TestOpenSSFGroupsUsesFiveScoreBuckets(t *testing.T) {
 			scoreNode("moderate", 5.0),
 			scoreNode("weak", 3.0),
 			scoreNode("poor", 2.9),
-			{ID: "missing", OpenSSF: &graph.OpenSSFScore{Status: "no_scorecard"}},
+			{ID: "missing", Lenses: graph.LensResults{graph.LensOpenSSF: {Status: "no_scorecard"}}},
 		},
 	})
 
@@ -143,11 +143,11 @@ func TestOpenSSFGroupsSeparatesUnavailableAndErrors(t *testing.T) {
 
 	groups := OpenSSFGroups(graph.Graph{
 		Nodes: []graph.Node{
-			{ID: "missing", OpenSSF: &graph.OpenSSFScore{Status: "no_scorecard"}},
-			{ID: "unavailable", OpenSSF: &graph.OpenSSFScore{Status: "unavailable"}},
-			{ID: "no-project", OpenSSF: &graph.OpenSSFScore{Status: "no_project"}},
-			{ID: "skipped", OpenSSF: &graph.OpenSSFScore{Status: "skipped"}},
-			{ID: "error", OpenSSF: &graph.OpenSSFScore{Status: "error"}},
+			{ID: "missing", Lenses: graph.LensResults{graph.LensOpenSSF: {Status: "no_scorecard"}}},
+			{ID: "unavailable", Lenses: graph.LensResults{graph.LensOpenSSF: {Status: "unavailable"}}},
+			{ID: "no-project", Lenses: graph.LensResults{graph.LensOpenSSF: {Status: "no_project"}}},
+			{ID: "skipped", Lenses: graph.LensResults{graph.LensOpenSSF: {Status: "skipped"}}},
+			{ID: "error", Lenses: graph.LensResults{graph.LensOpenSSF: {Status: "error"}}},
 		},
 	})
 
@@ -167,7 +167,7 @@ func TestOpenSSFGroupsSeparatesUnavailableAndErrors(t *testing.T) {
 	}
 }
 
-func TestOpenSSFGroupsShownWithoutOverlayFlag(t *testing.T) {
+func TestOpenSSFGroupsShownWithoutLensDefinitions(t *testing.T) {
 	t.Parallel()
 
 	groups := OpenSSFGroups(graph.Graph{
@@ -251,10 +251,7 @@ func TestLensGroupsEmptyGraph(t *testing.T) {
 
 func scoreNode(id string, score float64) graph.Node {
 	return graph.Node{
-		ID: id,
-		OpenSSF: &graph.OpenSSFScore{
-			Status: "found",
-			Score:  &score,
-		},
+		ID:     id,
+		Lenses: graph.LensResults{graph.LensOpenSSF: {Status: "found", Score: &score}},
 	}
 }

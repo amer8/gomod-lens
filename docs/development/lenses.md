@@ -244,6 +244,13 @@ in `internal/graph/release_freshness.go`. Then read `freshnessRecord` in
 `analysis/freshness.js` to see the browser consume that payload. Scorecard
 follows the same pattern and fetches repository check details in its browser view.
 
+Per-node Scorecard summaries live only in `node.lenses.openssf`. Read `status`
+and the optional `score` from that result; `details` preserves the assessed
+`module`, `version`, `projectId` and `date`. The assessed identity may differ
+from the node when a dependency is replaced. Lookup errors and skip reasons
+use `message`. Available lenses are declared in `meta.lenses`. The browser
+loads the richer repository report, including individual checks, separately.
+
 ## Validation
 
 ```sh

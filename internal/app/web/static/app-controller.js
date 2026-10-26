@@ -243,14 +243,9 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     const lensIDs = new Set((payload?.meta?.lenses || []).map((lens) => lens?.id).filter(Boolean))
     for (const lensID of ['openssf', 'release-freshness']) {
       if (!lensIDs.has(lensID)) continue
-      if (!payload.nodes.every((node) => lensResult(node, lensID)?.status)) return false
+      if (!payload.nodes.every((node) => node?.lenses?.[lensID]?.status)) return false
     }
     return true
-  }
-
-  function lensResult(node, lensID) {
-    if (lensID === 'openssf') return node?.lenses?.openssf || node?.openssf
-    return node?.lenses?.[lensID]
   }
 
   function setGraphLoaded(value) {

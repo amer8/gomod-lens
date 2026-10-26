@@ -18,7 +18,7 @@ test('an aggregate-only report is not silently expanded into invented successful
 })
 test('Scorecard lookup uses the resolved source project, not the selected module tag', async () => {
   let called=''
-  const result=await loadReport({name:'golang.org/x/net',version:'v0.1.0',openssf:{projectId:'github.com/golang/net'}},{fetcher:async url=>{called=url;return {ok:true,json:async()=>({scorecard:{overallScore:9,checks:[]}})}}})
+  const result=await loadReport({name:'golang.org/x/net',version:'v0.1.0',lenses:{openssf:{details:{projectId:'github.com/golang/net'}}}},{fetcher:async url=>{called=url;return {ok:true,json:async()=>({scorecard:{overallScore:9,checks:[]}})}}})
   assert.equal(called,'https://api.deps.dev/v3/projects/github.com%2Fgolang%2Fnet')
   assert.equal(result.score,9)
   assert.equal((await loadReport({name:'unknown',version:'v1'})).missing,true)

@@ -203,7 +203,7 @@ export function answerQuestion(topic, context, evidence = {}, { licenseQuery = n
     show('Open repository checks', [selected.id], 'openssf')
   } else if (topic === 'unknown') {
     const releaseUnknown = graph.nodes.filter(node => freshnessRecord(node).status === 'unknown')
-    const scoreUnknown = graph.nodes.filter(node => (node.lenses?.openssf?.status || node.openssf?.status) !== 'found')
+    const scoreUnknown = graph.nodes.filter(node => node.lenses?.openssf?.status !== 'found')
     result.paragraphs.push(`Loaded graph: ${releaseUnknown.length} modules have unknown release status; ${scoreUnknown.length} lack a found repository Scorecard observation.`)
     for (const [key, label, known] of [['vulnerabilities', 'Advisories', ['matched', 'clear']], ['licenses', 'Licenses', ['observed', 'nonstandard']]]) {
       const observed = evidence[key]?.records

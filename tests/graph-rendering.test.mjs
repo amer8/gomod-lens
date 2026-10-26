@@ -43,9 +43,11 @@ test('selection highlights the root path and neighbors; lens group requests pres
 
 test('colors preserve unknown and error observations and custom lens colors', () => {
   assert.equal(lensColor({ lenses: { openssf: { status: 'found', score: 9 } } }), '#6ed0b3')
-  assert.equal(lensColor({ openssf: { status: 'found', score: 2 } }), '#dc5f65')
-  assert.equal(lensColor({ openssf: { status: 'found' } }), '#8b95a7')
-  assert.equal(lensColor({ openssf: { status: 'error' } }), '#e5a15a')
+  assert.equal(lensColor({ lenses: { openssf: { status: 'found', score: 2 } } }), '#dc5f65')
+  assert.equal(lensColor({ lenses: { openssf: { status: 'found', score: 0 } } }), '#dc5f65')
+  assert.equal(lensColor({ lenses: { openssf: { status: 'found' } } }), '#8b95a7')
+  assert.equal(lensColor({}), '#8b95a7')
+  assert.equal(lensColor({ lenses: { openssf: { status: 'error' } } }), '#e5a15a')
   assert.equal(lensColor({ lenses: { 'release-freshness': { status: 'major_behind' } } }, 'release-freshness'), '#dc5f65')
   const model = createGraphModel(payload())
   model.setColors({ a: '#123456' }); assert.equal(model.byID.get('a').color, '#123456')
