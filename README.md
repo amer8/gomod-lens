@@ -81,6 +81,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
 Treat go.mod Lens as a public-module explorer. Do not submit private module
 paths, repository names, tokens, or other secrets to a public deployment.
 External service behavior is summarized in [PRIVACY.md](PRIVACY.md).
+The static build publishes readable Privacy and Licenses and notices pages,
+linked from the app before any lookup. The deployment includes the full data
+and model licenses and the exact Go toolchain's runtime license.
 
 ## Credits
 

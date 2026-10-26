@@ -1,6 +1,6 @@
 # Privacy and External Services
 
-Last updated: October 25, 2026
+Last updated: October 26, 2026
 
 go.mod Lens is intended for exploring public Go modules. Do not enter private
 module paths, secret repository names, access tokens, or other non-public
@@ -8,6 +8,13 @@ identifiers into a public deployment.
 
 This document describes the behavior of this project. Static hosting may add
 its own access logs, CDN, or platform-level data collection.
+The app links this document as `privacy.html`; it is available before a module
+is submitted or a model is loaded.
+
+Each upstream service receives the requested public identifiers and normal
+connection information, including the visitor's IP address and browser-supplied
+request headers. Connections go directly from the visitor's browser to those
+services. Their privacy policies govern their handling of those requests.
 
 ## Data Sent to External Services
 
@@ -40,9 +47,10 @@ go.mod Lens fetches OpenSSF Scorecard and related project metadata from the
 deps.dev API for modules in the displayed graph. Requests include public module
 paths, versions, and project identifiers derived from those modules.
 
-deps.dev generated data is available under CC-BY 4.0, and use of the deps.dev
-API is subject to the Google API Terms of Service:
-<https://docs.deps.dev/api/v3/>
+deps.dev-generated data is available under CC-BY 4.0. Aggregated Scorecard data
+retains its CDLA-Permissive-2.0 license. Use of the deps.dev API is subject to
+the [Google API Terms of Service](https://developers.google.com/terms).
+See the [API and data documentation](https://docs.deps.dev/api/v3/).
 
 Scorecard details and license evidence retrieve public
 repository reports and exact-version license metadata directly from
@@ -59,6 +67,8 @@ concurrent lookups, a 20-second timeout, and a five-minute page-memory cache.
 Failures remain unknown and Refresh retries the source.
 
 OSV API documentation: <https://google.github.io/osv.dev/api/>
+Advisories retain their original database licenses:
+[OSV data sources](https://google.github.io/osv.dev/data/).
 
 ### GitHub Search
 
@@ -69,6 +79,10 @@ are requested.
 See GitHub's API terms and search rate-limit documentation:
 <https://docs.github.com/en/site-policy/github-terms/github-terms-of-service>
 <https://docs.github.com/en/rest/search/search>
+
+Use the public lookup services in accordance with the terms linked above,
+including their applicable usage limits. The app's own MIT license does not
+replace the services' terms or the licenses on their data.
 
 ## Graph assistant and local AI
 
@@ -101,6 +115,9 @@ terminates the worker, preserving in-memory chat history
 and the draft. Ejection does not delete downloaded files. The browser/runtime may
 cache model files; clear browser site data to remove those files. This does not make evidence lookups
 offline.
+The model chooser provides each model's license and any acceptable use policy
+before loading it. Llama-based choices and active chat display their required
+attribution. Full license texts are in [Licenses and notices](THIRD_PARTY_NOTICES.md).
 
 ## Static Deployment
 

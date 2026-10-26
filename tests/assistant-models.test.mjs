@@ -35,6 +35,21 @@ test('catalog contains exactly the curated ten and excludes removed runtime vari
   assert.equal(findModel('gemma-4-E2B-it-q4f32_1-MLC'), undefined)
   assert.equal(findModel('untrusted-model'), undefined)
 })
+test('every offered checkpoint has license information and Llama derivatives keep their base terms', () => {
+  assert.ok(models.every(model => model.license?.name && model.license.url.startsWith('https://')))
+  assert.equal(findModel(defaultModelID).license.name, 'Apache-2.0')
+  assert.equal(findModel('Phi-4-mini-instruct-q4f32_1-MLC').license.name, 'MIT')
+  for (const [id, version] of [['Llama-3.2-3B-Instruct-q4f32_1-MLC', '3.2'], ['Hermes-3-Llama-3.1-8B-q4f32_1-MLC', '3.1']]) {
+    const { license } = findModel(id)
+    assert.ok(license.attribution.includes('Built with Llama'))
+    assert.ok(license.name.includes(version))
+    assert.ok(license.policyURL.includes('llama' + version.replace('.', '_')))
+  }
+  const hermes = findModel('Hermes-3-Llama-3.1-8B-q4f32_1-MLC').license
+  assert.ok(hermes.attribution.includes('Built with Meta Llama 3'))
+  assert.ok(hermes.publisherLicense.url.endsWith('/llama3/LICENSE'))
+  assert.ok(models.filter(model => !model.id.includes('Llama')).every(model => !model.license.attribution))
+})
 test('eject releases the worker and identity; another model loads with its own ID', async t => {
   browserGPU(t)
   const { ai, workers } = harness(); t.after(() => ai.stop())

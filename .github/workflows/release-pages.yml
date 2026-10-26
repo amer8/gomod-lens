@@ -44,6 +44,11 @@ jobs:
           test -f dist/assets/app.js
           test -f dist/assets/wasm-client.js
           test -f dist/assets/vendor/ngraph.forcelayout.js
+          test -f dist/privacy.html
+          test -f dist/notices.html
+          test -f dist/assets/licenses/Go.txt
+          test -f dist/assets/licenses/CDLA-Permissive-2.0.txt
+          test -f dist/assets/licenses/Llama-3.2.txt
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

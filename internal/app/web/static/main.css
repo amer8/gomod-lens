@@ -830,6 +830,26 @@ pre {
     line-height: 1.4;
 }
 
+.policy-links {
+    position: absolute;
+    right: max(104px, calc(env(safe-area-inset-right) + 86px));
+    bottom: max(22px, env(safe-area-inset-bottom));
+    z-index: 4;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    padding: 7px 12px;
+    border-radius: 6px;
+    background: rgba(24, 29, 44, 0.94);
+    font-size: 12px;
+}
+
+.policy-links a { color: #c9daef; }
+
+@media (max-width: 960px) {
+    .policy-links { right: 88px; bottom: max(18px, env(safe-area-inset-bottom)); }
+}
+
 .truncate {
     overflow-wrap: anywhere;
     word-break: break-word;

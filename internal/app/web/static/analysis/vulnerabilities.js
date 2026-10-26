@@ -57,8 +57,15 @@ function render({ host, graph, node, data, select, highlight, state = {} }) {
     const body = [notice(advisory.summary || 'No summary supplied'), notice('Fixed-version events: ' + (fixed.join(', ') || 'None supplied; review the advisory.'))]
     const description = advisory.details || ''
     if (description) body.push(notice(description.slice(0, 3500)))
+    if (description.length > 3500) body.push(notice('Description shortened for display; the source contains the full text.'))
     if (advisory.records.length > 1) body.push(notice(advisory.records.length + ' source records grouped by shared advisory identifiers.'))
     body.push(link('Read advisory and affected ranges ↗', 'https://osv.dev/vulnerability/' + encodeURIComponent(advisory.id)))
+    for (const record of advisory.records) {
+      const source = record.id.startsWith('GO-') ? 'Go Vulnerability Database (The Go Authors)' : record.id.startsWith('GHSA-') ? 'GitHub Advisory Database' : ''
+      if (source) body.push(notice('Source record: ' + record.id + ' · ' + source), link('Record license: CC-BY-4.0 ↗', 'https://creativecommons.org/licenses/by/4.0/'))
+      const credits = (Array.isArray(record.credits) ? record.credits : []).filter(credit => typeof credit.name === 'string' && credit.name.trim())
+      if (credits.length) body.push(notice('Credits (' + record.id + '): ' + credits.map(credit => credit.name).join('; ')))
+    }
     detail.append(disclosure(advisory.id + (advisory.aliases?.length ? ' · ' + advisory.aliases.slice(0, 2).join(', ') : ''), body))
   }
   if (selected.identity && (selected.identity.name !== node.name || selected.identity.version !== node.version)) detail.append(notice('Resolved replacement: ' + selected.identity.name + '@' + selected.identity.version))
@@ -69,6 +76,7 @@ function render({ host, graph, node, data, select, highlight, state = {} }) {
   searchable(host, { label: 'Module advisory results', items, filters, state, groups: filters, highlight, headers: ['Module / version', 'OSV result'], row: item => [moduleButton(item.node, select), badge(item.status === 'matched' ? item.record.groups.length + (item.record.groups.length === 1 ? ' issue' : ' issues') : item.status === 'clear' ? 'No matches' : 'Unknown', item.status === 'matched' ? 'bad' : item.status === 'clear' ? 'good' : '')] })
   host.append(disclosure('Selected module · ' + node.name, [detail], true))
   host.append(notice('Source: OSV · Observed ' + data.capturedAt, 'analysis-provenance'))
+  host.append(link('Original advisory databases and data licenses ↗', 'https://google.github.io/osv.dev/data/'))
 }
 /** @type {import('./types.js').BrowserLens} */
 const lens = {

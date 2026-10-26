@@ -45,6 +45,7 @@ function render({ host, graph, node, data, select, highlight, state = {} }) {
   actions.append(showUnknowns)
   host.append(actions, notice('Graph: green = identifiers observed · amber = non-standard · gray = unknown. These colors show evidence availability; they are not license approval decisions.'))
   host.append(notice('Source: deps.dev · Module metadata does not establish file-level completeness or license compatibility.', 'analysis-provenance'))
+  host.append(link('deps.dev-generated metadata: CC-BY-4.0 ↗', 'https://creativecommons.org/licenses/by/4.0/'))
 }
 /** @type {import('./types.js').BrowserLens} */
 const lens = {

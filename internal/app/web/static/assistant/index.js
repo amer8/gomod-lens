@@ -134,7 +134,9 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
   const changeModel = button('Change model', () => showModelPicker(true), 'assistant-eject')
   changeModel.title = 'Compare models while keeping the current model loaded'
   const footerActions = element('div', undefined, 'assistant-footer-actions'); footerActions.append(changeModel)
-  const footer = element('div', undefined, 'assistant-footer'); footer.append(status, footerActions)
+  const modelAttribution = element('div', undefined, 'assistant-model-attribution'); modelAttribution.hidden = true
+  const footerFeedback = element('div', undefined, 'assistant-footer-feedback'); footerFeedback.append(status, modelAttribution)
+  const footer = element('div', undefined, 'assistant-footer'); footer.append(footerFeedback, footerActions)
   dock.append(grip, controls, modelGate, transcript, starters, form, footer); app.append(launch, dock)
   const ai = new LocalAI({ progress: modelMessage })
 
@@ -158,6 +160,12 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
   function updateModelChoice() {
     const model = findModel(selectedModelID)
     modelInfo.replaceChildren(link('About this model ↗', model.url), element('span', ' · Download and memory sizes are approximate.'))
+    const terms = element('div', undefined, 'assistant-model-terms')
+    if (model.license.attribution) terms.append(element('strong', model.license.attribution + ' · '))
+    terms.append(link(model.license.name + ' ↗', model.license.url))
+    if (model.license.policyURL) terms.append(element('span', ' · '), link('Acceptable use policy ↗', model.license.policyURL))
+    if (model.license.publisherLicense) terms.append(element('span', ' · '), link(model.license.publisherLicense.name + ' ↗', model.license.publisherLicense.url), element('span', ' · '), link('Publisher use policy ↗', model.license.publisherPolicyURL))
+    modelInfo.append(terms)
     for (const { radio, row, marker } of modelChoices) {
       radio.checked = radio.value === selectedModelID
       radio.disabled = enabling || !navigator.gpu; row.classList.toggle('is-selected', radio.checked)
@@ -197,6 +205,11 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
     modelIntro.textContent = ai.ready ? 'Your current model stays loaded until you switch. Switching keeps your chat history.' : 'Choose a model, then load it to start chatting.'
     backToChat.hidden = !ai.ready; eject.hidden = !ai.ready; changeModel.hidden = !ai.ready
     updateModelChoice()
+    const loaded = ai.ready ? findModel(ai.loadedModelID) : null
+    modelAttribution.hidden = !loaded?.license.attribution
+    modelAttribution.replaceChildren()
+    if (loaded?.license.attribution) modelAttribution.append(element('strong', loaded.license.attribution + ' · '), link(loaded.license.name + ' ↗', loaded.license.url))
+    if (loaded?.license.publisherLicense) modelAttribution.append(element('span', ' · '), link(loaded.license.publisherLicense.name + ' ↗', loaded.license.publisherLicense.url))
     setBusy(); renderStarters(); disableOldActions()
     if (!controller) status.textContent = ai.ready ? findModel(ai.loadedModelID).name + ' ready' : enabling ? 'Loading the local model…' : 'Load the model to start chatting'
   }

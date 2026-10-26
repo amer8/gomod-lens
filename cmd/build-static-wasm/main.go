@@ -80,7 +80,10 @@ func (b builder) syncAssets() error {
 	if err := copyDirectory(filepath.Join(b.root, assetsSource), filepath.Join(b.root, assetsTarget)); err != nil {
 		return fmt.Errorf("copy browser assets: %w", err)
 	}
-	return copyFile(filepath.Join(b.root, indexSource), filepath.Join(b.root, "dist", "index.html"))
+	if err := copyFile(filepath.Join(b.root, indexSource), filepath.Join(b.root, "dist", "index.html")); err != nil {
+		return err
+	}
+	return b.publishDocuments()
 }
 
 func (b builder) buildWithGo() error {
@@ -103,7 +106,14 @@ func (b builder) buildWithGo() error {
 	if err != nil {
 		return err
 	}
-	return copyFile(filepath.Join(strings.TrimSpace(goRoot), "lib", "wasm", "wasm_exec.js"), filepath.Join(b.root, wasmRuntime))
+	return b.copyGoRuntime(strings.TrimSpace(goRoot))
+}
+
+func (b builder) copyGoRuntime(goRoot string) error {
+	if err := copyFile(filepath.Join(goRoot, "lib", "wasm", "wasm_exec.js"), filepath.Join(b.root, wasmRuntime)); err != nil {
+		return err
+	}
+	return copyFile(filepath.Join(goRoot, "LICENSE"), filepath.Join(b.root, assetsTarget, "licenses", "Go.txt"))
 }
 
 func (b builder) command(name string, args ...string) *exec.Cmd {

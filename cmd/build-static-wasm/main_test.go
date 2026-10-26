@@ -26,6 +26,11 @@ func TestSyncAssetsBuildsFromCanonicalSourcesAndRemovesObsoleteOutputs(t *testin
 	if err := os.WriteFile(filepath.Join(root, indexSource), index, 0644); err != nil {
 		t.Fatal(err)
 	}
+	for _, name := range []string{"PRIVACY.md", "THIRD_PARTY_NOTICES.md", "LICENSE"} {
+		if err := copyFile(filepath.Join("..", "..", name), filepath.Join(root, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := os.MkdirAll(filepath.Join(root, assetsTarget), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -61,5 +66,44 @@ func TestSyncAssetsBuildsFromCanonicalSourcesAndRemovesObsoleteOutputs(t *testin
 		if strings.Contains(string(body), obsolete) {
 			t.Errorf("static page contains obsolete markup %q", obsolete)
 		}
+	}
+	for name, want := range map[string]string{
+		"privacy.html": "Each upstream service receives",
+		"notices.html": `href="assets/licenses/CDLA-Permissive-2.0.txt"`,
+		"LICENSE.txt":  "MIT License",
+	} {
+		body, err := os.ReadFile(filepath.Join(root, "dist", name))
+		if err != nil || !strings.Contains(string(body), want) {
+			t.Errorf("public document %s missing content %q: %v", name, want, err)
+		}
+	}
+}
+
+func TestGoRuntimeIncludesLicenseFromSameToolchain(t *testing.T) {
+	root, toolchain := t.TempDir(), t.TempDir()
+	for name, body := range map[string]string{"lib/wasm/wasm_exec.js": "toolchain runtime", "LICENSE": "toolchain copyright, conditions and disclaimer"} {
+		path := filepath.Join(toolchain, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b := builder{root: root}
+	if err := b.copyGoRuntime(toolchain); err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{wasmRuntime: "toolchain runtime", "dist/assets/licenses/Go.txt": "toolchain copyright, conditions and disclaimer"} {
+		body, err := os.ReadFile(filepath.Join(root, name))
+		if err != nil || string(body) != want {
+			t.Errorf("%s: got %q, err=%v", name, body, err)
+		}
+	}
+	if err := os.Remove(filepath.Join(toolchain, "LICENSE")); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.copyGoRuntime(toolchain); err == nil {
+		t.Fatal("missing toolchain license must fail the build")
 	}
 }

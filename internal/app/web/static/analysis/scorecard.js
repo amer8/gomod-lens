@@ -68,6 +68,7 @@ function render({ host, data, node, state = {} }) {
   if (data.repository.name) provenance.append(element('div', 'Repository: ' + data.repository.name))
   if (data.repository.commit) provenance.append(element('div', 'Assessed commit: ' + data.repository.commit))
   provenance.append(element('div', 'Retrieved: ' + data.fetchedAt), link('View source report ↗', data.source))
+  provenance.append(link('Scorecard data: CDLA-Permissive-2.0 ↗', 'https://cdla.dev/permissive-2-0/'))
   evidenceHost.append(provenance)
   host.append(evidenceHost)
 }
