@@ -5,6 +5,7 @@ const stages = [
   { value: 82, labels: ['Applying OpenSSF lens'], status: 'Checking security practices', detail: 'Loading OpenSSF Scorecard evidence for the graph.' },
   { value: 98, labels: ['Applying Release Freshness lens'], status: 'Checking release freshness', detail: 'Fetching published versions for the dependency graph.' },
 ]
+const minimumStageDuration = 500
 
 export function createGraphLoadingView(container) {
   const target = container.querySelector('#graph-loading-target')
@@ -16,12 +17,24 @@ export function createGraphLoadingView(container) {
     detail: element.querySelector('.graph-loading-detail'),
     status: element.querySelector('.graph-loading-step-status'),
   }))
-  let active = false, stage = -1, timer = null
+  let active = false, stage = -1, reportedStage = -1, stageStartedAt = 0
+  let waitTimer = null, stageTimer = null, completion = null, resolveCompletion = null
+
+  function clearTimers() {
+    window.clearTimeout(waitTimer)
+    window.clearTimeout(stageTimer)
+    stageTimer = null
+  }
+
+  function complete() {
+    resolveCompletion?.()
+    resolveCompletion = null
+  }
 
   function restartWaitTimer() {
-    window.clearTimeout(timer)
+    window.clearTimeout(waitTimer)
     wait.hidden = true
-    timer = window.setTimeout(() => { if (active) wait.hidden = false }, 15000)
+    waitTimer = window.setTimeout(() => { if (active) wait.hidden = false }, 15000)
   }
 
   function render() {
@@ -37,10 +50,35 @@ export function createGraphLoadingView(container) {
     })
   }
 
+  function advance() {
+    if (!active || stage >= reportedStage || stageTimer !== null) return
+    const remaining = stage < 0 ? 0 : minimumStageDuration - (window.performance.now() - stageStartedAt)
+    if (remaining > 0) {
+      stageTimer = window.setTimeout(() => { stageTimer = null; advance() }, remaining)
+      return
+    }
+    stage++
+    stageStartedAt = window.performance.now()
+    container.dataset.state = stage === stages.length ? 'complete' : 'loading'
+    status.textContent = stages[stage]?.status || 'Preparing visualization…'
+    render()
+    if (stage === stages.length) {
+      window.clearTimeout(waitTimer)
+      wait.hidden = true
+      complete()
+    } else {
+      restartWaitTimer()
+      advance()
+    }
+  }
+
   return {
     show(moduleTarget) {
+      clearTimers()
+      complete()
+      completion = null
       active = true
-      stage = -1
+      stage = reportedStage = -1
       target.textContent = moduleTarget
       container.dataset.state = 'preparing'
       status.textContent = 'Preparing analyzer…'
@@ -50,29 +88,25 @@ export function createGraphLoadingView(container) {
     },
     update({ value, label } = {}) {
       if (!active) return
-      if ((Number.isFinite(value) && value >= 100) || label === 'Done') {
-        stage = stages.length
-        container.dataset.state = 'complete'
-        status.textContent = 'Preparing visualization…'
-        window.clearTimeout(timer)
-        wait.hidden = true
-        render()
-        return
-      }
-      let next = stages.findIndex(entry => entry.labels.includes(label))
+      const done = (Number.isFinite(value) && value >= 100) || label === 'Done'
+      let next = done ? stages.length : stages.findIndex(entry => entry.labels.includes(label))
       if (next < 0 && Number.isFinite(value)) next = stages.findLastIndex(entry => value >= entry.value)
-      if (next < stage) return
-      if (next !== stage) {
-        stage = next
-        container.dataset.state = 'loading'
-        restartWaitTimer()
-        render()
-      }
-      status.textContent = stages[stage]?.status || label || 'Preparing analyzer…'
+      if (next < reportedStage) return
+      reportedStage = next
+      if (next < 0) status.textContent = label || 'Preparing analyzer…'
+      advance()
+    },
+    finish() {
+      if (!active || stage === stages.length) return Promise.resolve()
+      completion ||= new Promise(resolve => { resolveCompletion = resolve })
+      reportedStage = stages.length
+      advance()
+      return completion
     },
     hide() {
       active = false
-      window.clearTimeout(timer)
+      clearTimers()
+      complete()
       wait.hidden = true
       container.hidden = true
     },

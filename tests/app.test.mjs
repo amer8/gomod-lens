@@ -36,11 +36,24 @@ function fixture(t) {
   }
   ids.get('search-form').stack = new Element()
   const window = new EventTarget()
-  let hash = '', timer = 0
+  let hash = '', timer = 0, now = 0
   window.location = { get hash() { return hash }, set hash(value) { hash = value ? '#' + value.replace(/^#/, '') : ''; queueMicrotask(() => window.dispatchEvent(event('hashchange'))) } }
   window.history = { replaceState(_, __, value) { hash = value } }
-  window.setTimeout = callback => { timers.set(++timer, callback); return timer }
+  window.performance = { now: () => now }
+  window.setTimeout = (callback, delay = 0) => { timers.set(++timer, { callback, at: now + delay }); return timer }
   window.clearTimeout = id => timers.delete(id)
+  function tick(milliseconds = 220) {
+    const until = now + milliseconds
+    for (;;) {
+      const next = [...timers.entries()].sort((a, b) => a[1].at - b[1].at)[0]
+      if (!next || next[1].at > until) break
+      const [id, { callback, at }] = next
+      now = at
+      timers.delete(id)
+      callback()
+    }
+    now = until
+  }
   for (const [name, value] of Object.entries({ document, window, Node: Element })) {
     const previous = Object.getOwnPropertyDescriptor(globalThis, name)
     Object.defineProperty(globalThis, name, { configurable: true, value })
@@ -61,7 +74,8 @@ function fixture(t) {
     selectTarget(value) { selectedTarget = value },
     input(value) { const input = ids.get('module-target'); input.value = value; input.dispatchEvent(event('input')) },
     submit() { ids.get('search-form').dispatchEvent(event('submit')) },
-    tick() { const callbacks = [...timers.values()]; timers.clear(); callbacks.forEach(callback => callback()) },
+    tick,
+    async finish() { await flush(); tick(2500); await flush() },
     resolve(request, target = request.target, extra = {}) { request.resolve({ nodes: [{ id: 'root' }], edges: [], meta: { target }, ...extra }) },
   }
 }
@@ -72,7 +86,7 @@ test('routing honors the version picker, canonical targets, repeated submissions
   assert.deepEqual(app.targetInputs, ['example.org/mod'])
   assert.equal(app.graphRequests[0].target, 'example.org/mod@selected')
   assert.equal(app.ids.get('analyze-button').disabled, true)
-  app.resolve(app.graphRequests[0], 'example.org/mod@v1.2.3'); await flush()
+  app.resolve(app.graphRequests[0], 'example.org/mod@v1.2.3'); await app.finish()
   assert.equal(new URLSearchParams(app.window.location.hash.slice(1)).get('target'), 'example.org/mod@v1.2.3')
   assert.equal(app.graphRequests.length, 1, 'canonical URL replacement must not reload the graph')
   assert.equal(app.rendered.length, 1); assert.equal(app.captured.length, 1)
@@ -119,7 +133,7 @@ test('built-in lens validation accepts canonical results including a zero Scorec
   const lenses = { openssf: { status: 'found', score: 0 }, 'release-freshness': { status: 'current' } }
   app.resolve(app.graphRequests[0], undefined, {
     nodes: [{ id: 'root', lenses }], meta: { lenses: Object.keys(lenses).map(id => ({ id })) },
-  }); await flush()
+  }); await app.finish()
   assert.equal(app.rendered.length, 1)
   assert.deepEqual(app.rendered[0].nodes[0].lenses, lenses)
   assert.equal(app.ids.get('graph-errors').hidden, true)
@@ -150,9 +164,10 @@ test('superseded graph requests cannot overwrite current progress, results or er
   const [old, current] = app.graphRequests
   assert.equal(old.options.signal.aborted, true)
   current.options.onProgress({ value: 25, label: 'Resolving dependencies' }); old.options.onProgress({ value: 90, label: 'Applying OpenSSF lens' })
+  app.tick(500)
   assert.equal(app.ids.get('graph-loading-status').textContent, 'Resolving dependencies')
   assert.equal(app.ids.get('graph-progress').children[1].attributes.get('aria-current'), 'step')
-  app.resolve(current); await flush()
+  app.resolve(current); await app.finish()
   old.reject(new Error('late failure')); await flush()
   assert.equal(app.rendered.length, 1)
   assert.equal(app.ids.get('graph-errors').hidden, true)
@@ -183,6 +198,7 @@ test('guided loading follows resolver stages and stays active during final relea
     assert.equal(steps[index].attributes.get('aria-current'), 'step')
     assert(steps.slice(index + 1).every(step => step.dataset.state === 'pending'))
     assert.equal(progress.hidden, false)
+    app.tick(500)
   }
   assert.equal(app.ids.get('graph-loading-status').textContent, 'Checking release freshness')
   assert.equal(app.rendered.length, 0, '99% must not imply that a graph is ready')
@@ -202,8 +218,9 @@ test('a longer stage shows a wait message and changing stages or canceling clear
   app.input('example.org/mod'); app.submit(); await flush()
   const request = app.graphRequests[0], wait = app.ids.get('graph-loading-wait')
   request.options.onProgress({ value: 90, label: 'Applying OpenSSF lens' })
+  app.tick(1500)
   assert.equal(wait.hidden, true)
-  app.tick()
+  app.tick(15000)
   assert.equal(wait.hidden, false)
   request.options.onProgress({ value: 95, label: 'Applying OpenSSF lens' })
   assert.equal(wait.hidden, false, 'incremental progress within one stage should not hide the message')
@@ -216,7 +233,7 @@ test('a longer stage shows a wait message and changing stages or canceling clear
   assert.equal(app.ids.get('module-target').value, 'example.org/mod')
   assert.equal(app.ids.get('module-target').focused, true)
   assert.equal(app.ids.get('analyze-button').disabled, false)
-  app.tick()
+  app.tick(15000)
   request.options.onProgress({ value: 100, label: 'Done' })
   app.resolve(request); await flush()
   assert.equal(wait.hidden, true)
@@ -226,8 +243,70 @@ test('a longer stage shows a wait message and changing stages or canceling clear
   app.submit(); await flush()
   assert.equal(app.graphRequests.length, 2, 'the canceled target can be submitted again')
   assert.equal(app.ids.get('graph-loading-status').textContent, 'Preparing analyzer…')
-  app.resolve(app.graphRequests[1]); await flush()
+  app.resolve(app.graphRequests[1]); await app.finish()
   assert.equal(app.rendered.length, 1)
+})
+
+test('fast resolution still displays every stage for at least half a second', async t => {
+  const app = fixture(t)
+  app.input('example.org/fast'); app.submit(); await flush()
+  const request = app.graphRequests[0], steps = app.ids.get('graph-progress').children
+  request.options.onProgress({ value: 99, label: 'Applying Release Freshness lens' })
+  request.options.onProgress({ value: 100, label: 'Done' })
+  app.resolve(request); await flush()
+
+  for (let stage = 0; stage < steps.length; stage++) {
+    assert.equal(steps[stage].dataset.state, 'active')
+    assert.equal(app.ids.get('graph-progress').hidden, false)
+    app.tick(499); await flush()
+    assert.equal(steps[stage].dataset.state, 'active', 'each stage must remain visible for the entire 500 ms')
+    assert.equal(app.rendered.length, 0, 'a ready payload must wait for the displayed stages')
+    app.tick(1); await flush()
+  }
+  assert.equal(app.rendered.length, 1)
+  assert.equal(app.ids.get('graph-progress').hidden, true)
+})
+
+test('a stage already visible for half a second advances immediately when real progress arrives', async t => {
+  const app = fixture(t)
+  app.input('example.org/slow'); app.submit(); await flush()
+  const request = app.graphRequests[0], steps = app.ids.get('graph-progress').children
+  request.options.onProgress({ value: 4, label: 'Resolving module' })
+  app.tick(2000)
+  assert.equal(steps[0].dataset.state, 'active', 'presentation must not run ahead of real progress')
+  request.options.onProgress({ value: 18, label: 'Resolving dependencies' })
+  assert.equal(steps[1].dataset.state, 'active', 'slow stages do not need an additional artificial wait')
+  app.tick(500)
+  request.options.onProgress({ value: 78, label: 'Building graph' })
+  assert.equal(steps[2].dataset.state, 'active')
+  app.resolve(request); await app.finish()
+  assert.equal(app.rendered.length, 1)
+})
+
+test('replacing or canceling a ready graph during the display delay cannot reveal stale results', async t => {
+  const app = fixture(t)
+  app.input('example.org/first'); app.submit(); await flush()
+  app.resolve(app.graphRequests[0]); await flush()
+  app.tick(750)
+  assert.equal(app.rendered.length, 0)
+
+  app.input('example.org/second'); app.submit(); await flush()
+  assert.equal(app.graphRequests[0].options.signal.aborted, true)
+  assert.equal(app.ids.get('graph-loading-target').textContent, 'example.org/second')
+  assert.equal(app.ids.get('graph-loading-status').textContent, 'Preparing analyzer…')
+  app.resolve(app.graphRequests[1]); await flush()
+  app.tick(200)
+  app.ids.get('cancel-graph-loading').dispatchEvent(event('click'))
+  app.tick(5000); await flush()
+  assert.equal(app.graphRequests[1].options.signal.aborted, true)
+  assert.equal(app.rendered.length, 0)
+  assert.equal(app.ids.get('graph-progress').hidden, true)
+  assert.equal(app.ids.get('graph-errors').hidden, true)
+
+  app.submit(); await flush()
+  app.resolve(app.graphRequests[2]); await app.finish()
+  assert.equal(app.rendered.length, 1)
+  assert.equal(app.rendered[0].meta.target, 'example.org/second')
 })
 
 test('sidebar summaries preserve navigation, distributions and untrusted text', t => {

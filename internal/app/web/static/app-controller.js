@@ -205,8 +205,10 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
       })
       if (graphController !== own || own.signal.aborted) return
       if (!hasCompleteBuiltInLensData(payload)) throw new Error('Built-in lens data was not included in the graph response')
+      await loadingView.finish()
+      if (graphController !== own || own.signal.aborted) return
       syncResolvedTarget(payload?.meta?.target || target)
-      loadingView.update({ value: 100 }); setGraphResult(renderSidebar(payload))
+      setGraphResult(renderSidebar(payload))
       renderGraph(elements.graphCanvas, payload, { onNodeSelected(node) {
         selectNode(node?.id || ''); analysisViews.select(node)
       } })
