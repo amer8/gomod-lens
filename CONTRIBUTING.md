@@ -4,10 +4,10 @@ Thanks for taking the time to improve go.mod Lens.
 
 ## Development Setup
 
-You need Go 1.26 or newer and Node.js 22 or newer for tests. The application
-runs in the browser: Go/WASM resolves public module graphs, and JavaScript
-renders the graph, sidebar and lenses. No npm install or JavaScript build step
-is required.
+Development requires Go 1.26 or newer. Use Node.js 24 LTS for the test suite.
+The application runs in the browser: Go/WASM resolves public module graphs,
+and JavaScript renders the graph, sidebar and lenses. No npm install or
+JavaScript build step is required.
 
 Run the static application locally:
 

@@ -14,88 +14,107 @@ to older published versions. The search field keeps the module path; Analyze
 preserves the selected version for that module. Explicit `module@version`
 input and shared URLs still work.
 
-## Lenses
+**[Start the guided example: Gin v1.10.0](https://amer8.github.io/gomod-lens/?lens=release-freshness#target=github.com%2Fgin-gonic%2Fgin%40v1.10.0)**
 
-OpenSSF Scorecard highlights repository security practices. Release Freshness
-shows whether selected versions are current, patch/minor/major behind,
-pre-release, pseudo-version, or unknown. Vulnerability exposure matches exact
-module versions against OSV advisories. License evidence displays expressions
-observed by deps.dev for exact module versions. Go requirements reads each
-exact version's `go.mod`, groups declared minimum Go versions, and compares
-them with a chosen target toolchain. Older minimums are compatibility baselines,
-not maintenance or security scores. See the
-[Go requirements guide](docs/features/go-requirements.md).
+## 1. Load a published version
 
-Go graph enrichment supplies Scorecard summaries, release freshness, descendant
-counts and already-parsed Go minimums in the graph payload. The sidebar and
-renderer share those counts. The browser adds Scorecard check details,
-vulnerability matches and license evidence when those views are opened.
-Go requirements reuses known minimums and asks WASM to fetch and parse only
-missing exact versions. Supplemental observations stay in browser memory.
+Open [go.mod Lens](https://amer8.github.io/gomod-lens/) and enter:
 
-The **Graph assistant** adds a collapsible chat dock with three contextual
-starter questions and three follow-ups after each answer. It connects answers
-to module selections, graph highlights, and source evidence. Chat requires
-WebLLM and a loaded model. A searchable, sortable comparison table offers ten curated browser-friendly models with download and memory estimates. Supported models think automatically; switch the
-loaded model while retaining chat history. Custom questions receive streamed answers using
-module evidence and conversation context, including source repository links. See [the assistant guide](docs/features/graph-assistant.md) for its
-scope, model download, privacy, and reproduction steps.
+```text
+github.com/gin-gonic/gin@v1.10.0
+```
 
-## Scorecard details
+The graph shows resolved module versions and their requirement relationships.
+Use the version selector to load another published release. URLs preserve the
+selected root version and lens, so another person can open the same view.
 
-The Scorecard lens shows the selected module’s source repository report with
-individual check scores, explanations, evidence, assessed commit, date and
-Scorecard version. Choose a graph node or the module selector to inspect it.
-Filter checks by name or availability and expand a check for remediation links.
-Unknown checks remain unknown. Reports describe a repository snapshot and may
-postdate the selected module release.
+![Gin v1.10.0 dependency graph with release update queues](docs/assets/app-overview.png)
 
-## Development
+*The screenshot is an example observation. Release and repository data can
+change after a module was published.*
 
-To change or add a lens, start with the
-[lens contributor guide](docs/development/lenses.md) and its
-`make new-lens NAME=module-overview` starter. See the
-[analysis views](docs/features/analysis-views.md) for UI reproduction steps.
+## 2. Trace a dependency
 
-Run `make help` for the full target list.
+Select a node, open **Go requirements**, and inspect **Module details**. For a
+dependency with a recorded path, expand **Dependency path** and use
+**Highlight path** to trace it back to the root.
 
-Development requires Go 1.26+ and Node.js 22+ for tests, without an npm build.
-`make check` builds the static deployment and runs Go/WASM and browser tests.
+Requirement edges describe module relationships. They do not identify package
+imports or calls to a particular function.
 
-The browser resolves graphs and sidebar summaries with Go/WASM, fetching public
-data directly from upstream APIs. There is no application backend or HTTP API.
-`dist/` is generated and ignored; edit the page shell in
-`internal/app/web/index.html` and browser sources in `internal/app/web/static/`,
-then rebuild with `make wasm` or preview with `make serve` (port 4173).
-`make run` is an alias for the same static preview. Existing HTTP API consumers
-must migrate; `/api/graph`, `/api/modules/search` and `/api/health` are removed.
+## 3. Compare your Go toolchain
 
-Graph rendering uses native Canvas for small graphs and WebGPU for graphs with
-at least 500 modules or 2,000 edges, with automatic Canvas fallback when a GPU
-is unavailable or lost. The CPU force layout still uses `ngraph.forcelayout`;
-graph storage and rendering have no ngraph dependency. See the
-[renderer verification and benchmark guide](docs/development/graph-rendering.md).
+The Go requirements lens groups modules by their declared minimum Go version.
+Open **Compare toolchain**, enter a version such as `1.26.0`, and choose
+**Compare**. Modules whose observed minimum exceeds the target are marked
+**Requires newer**. Changing the target compares the existing observations
+locally without another lookup.
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development notes.
+![Go requirements grouped by release family in the Gin example](docs/assets/go-requirements.png)
 
-## Privacy
+Select a version group to filter and highlight its modules. **Highest observed**
+focuses the greatest recorded minimum. Gray means that metadata is unknown.
+An older minimum alone does not indicate poor maintenance or insecurity.
 
-Treat go.mod Lens as a public-module explorer. Do not submit private module
-paths, repository names, tokens, or other secrets to a public deployment.
-External service behavior is summarized in [PRIVACY.md](PRIVACY.md).
-The static build publishes readable Privacy and Licenses and notices pages,
-linked from the app before any lookup. The deployment includes the full data
-and model licenses and the exact Go toolchain's runtime license.
+Read the [Go requirements guide](docs/features/go-requirements.md) for patch,
+prerelease, replacement, and Refresh behavior.
 
-## Credits
+## 4. Inspect the other evidence
 
-Mascot artwork uses
-[63.svg](https://github.com/MariaLetta/free-gophers-pack/blob/master/characters/svg/63.svg)
-from [MariaLetta/free-gophers-pack](https://github.com/MariaLetta/free-gophers-pack),
-licensed under CC0 1.0 Universal.
+| Investigation | Lens | What the observation means |
+| --- | --- | --- |
+| Compare loaded and published releases | Release Freshness | A release gap does not establish upgrade compatibility |
+| Inspect known advisory matches | Vulnerability exposure | OSV matches an exact module version; function reachability is unassessed |
+| Review recorded license expressions | License evidence | Expressions come from metadata and do not establish license compatibility |
+| Inspect repository security-practice checks | OpenSSF Scorecard | The report assesses a repository snapshot that may postdate the module release |
 
-## License
+Keep unknown and failed lookups separate from successful observations. A failed
+request cannot establish that no advisories or license expressions exist.
 
-go.mod Lens is released under the MIT License. See [LICENSE](LICENSE).
+For each lens's controls and source details, see [analysis views](docs/features/analysis-views.md),
+[vulnerability exposure](docs/features/vulnerability-exposure.md),
+[license evidence](docs/features/license-evidence.md), and
+[Scorecard details](docs/features/scorecard-details.md).
 
-Third-party notices are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## 5. Ask a follow-up
+
+Choose **Ask AI** and load a local model to ask about the graph. For example:
+
+- “How is the selected module connected to the root?”
+- “Which modules have known advisory matches?”
+- “What license evidence is available?”
+
+The assistant can select or highlight modules and show supporting evidence.
+Chat requires WebGPU and a downloaded model. Inference stays on your device;
+evidence lookups still use public services. See the
+[assistant guide](docs/features/graph-assistant.md).
+
+## Continue with another module
+
+Load another root or version to start a new analysis context. Try
+`github.com/spf13/cobra` or `github.com/google/uuid@v1.6.0`, choose a dependency,
+and repeat the investigations that matter to you.
+
+## Run the tour locally
+
+From a checkout, with Go 1.26+ installed:
+
+```sh
+make serve
+```
+
+Open [localhost:4173](http://localhost:4173). The Go server serves the static
+application; Go/WASM performs analysis in your browser. Public upstream services
+are still required. Use Node.js 24 LTS to run `make check`.
+
+For changes to the application, see [Contributing](CONTRIBUTING.md) and the
+[lens developer guide](docs/development/lenses.md).
+
+## Public data and licensing
+
+Use public module identifiers. See [Privacy](PRIVACY.md) for external requests,
+local model behavior, and caching.
+
+Project code is [MIT licensed](LICENSE). See [third-party notices](THIRD_PARTY_NOTICES.md)
+for data and model terms, browser libraries, and the CC0 gopher artwork by
+[MariaLetta](https://github.com/MariaLetta/free-gophers-pack).

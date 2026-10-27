@@ -23,7 +23,7 @@ run: serve ## Build and preview the static application.
 test: cache-dirs ## Run all Go tests with repo-local caches.
 	$(GO_ENV) $(GO) test $(GO_PACKAGES)
 
-test-js: ## Run browser logic and registry tests (Node.js 22+).
+test-js: ## Run browser logic and registry tests (Node.js 24 LTS).
 	$(NODE) --test tests/*.test.mjs
 
 new-lens: ## Scaffold and register a browser lens: make new-lens NAME=module-overview.
