@@ -31,10 +31,8 @@ export function createGraphLayout(model) {
       layout.step()
       const energy = copy(true)
       stableFrames = energy < 0.003 * Math.max(model.nodes.length, 1) ? stableFrames + 1 : 0
-      if (stableFrames >= 10) copy()
       return stableFrames >= 10
     },
-    finish() { copy() },
     dispose() { layout.dispose() },
   }
 }

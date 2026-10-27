@@ -84,7 +84,6 @@ test('force layout keeps the root pinned and finite positions for cyclic and dis
   const model = createGraphModel(payload()), layout = createGraphLayout(model)
   try {
     for (let i = 0; i < 80; i++) layout.step()
-    layout.finish()
     assert.equal(model.positions[0], 0); assert.equal(model.positions[1], 0)
     assert(model.positions.every(Number.isFinite))
     assert(model.nodes.slice(1).every(node => Math.hypot(model.positions[node.index * 2], model.positions[node.index * 2 + 1]) > 0))

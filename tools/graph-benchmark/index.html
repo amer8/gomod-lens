@@ -19,7 +19,7 @@ window.benchmark = {
     const start = performance.now(), model = createGraphModel(payload), modelMs = performance.now() - start
     const layoutStart = performance.now(), layout = createGraphLayout(model)
     for (let i = 0; i < 300; i++) layout.step()
-    layout.finish(); layout.dispose()
+    layout.dispose()
     prepared = { payload, positions: [...model.positions], modelMs, layoutMs: performance.now() - layoutStart }
     return { nodes: model.nodes.length, edges: model.links.length, modelMs, layoutMs: prepared.layoutMs }
   },

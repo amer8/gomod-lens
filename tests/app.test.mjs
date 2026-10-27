@@ -7,7 +7,7 @@ const flush = () => new Promise(setImmediate)
 const event = (type, properties = {}) => Object.assign(new Event(type, { cancelable: true }), properties)
 const pending = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
 
-function fixture(t) {
+function fixture(t, { renderGraph } = {}) {
   const ids = new Map(), timers = new Map()
   class Element extends EventTarget {
     constructor(id = '') { super(); this.id = id; this.dataset = {}; this.style = {}; this.children = []; this.hidden = false; this.value = ''; this.textContent = ''; this.attributes = new Map(); this.classes = new Set(); this.classList = { toggle: (name, active) => active ? this.classes.add(name) : this.classes.delete(name) } }
@@ -66,7 +66,7 @@ function fixture(t) {
     searchModules(query, limit, signal) { const request = { query, limit, signal, ...pending() }; searchRequests.push(request); return request.promise },
   }
   createApplication({ client,
-    graphView: { applyHighlightRequest() {}, setAnalysisColors() {}, clearGraph() {}, renderGraph: (_, payload) => rendered.push(payload), selectNode() {}, setGraphLens() {} },
+    graphView: { applyHighlightRequest() {}, setAnalysisColors() {}, clearGraph() {}, renderGraph: (_, payload) => { rendered.push(payload); return renderGraph?.() }, selectNode() {}, setGraphLens() {} },
     createAnalysisViews: () => ({ loading() {}, select() {}, capture: payload => captured.push(payload) }),
     createModuleVersionPicker: () => ({ loading() {}, clear() {}, target(value) { targetInputs.push(value); return selectedTarget || value }, capture() {} }),
   })
@@ -125,6 +125,41 @@ test('invalid graph data uses the graph error UI', async t => {
   app.window.location.hash = 'target=..%2Fprivate'; await flush()
   assert.equal(app.graphRequests.length, 1)
   assert.equal(app.ids.get('graph-errors').hidden, true)
+})
+
+test('loading stays active until the graph is framed and renderer failures reach the error UI', async t => {
+  let rendering = pending()
+  const app = fixture(t, { renderGraph: () => rendering.promise })
+  app.input('example.org/mod'); app.submit(); await flush()
+  app.resolve(app.graphRequests[0]); await app.finish()
+  assert.equal(app.rendered.length, 1)
+  assert.equal(app.ids.get('graph-progress').hidden, false)
+  assert.equal(app.ids.get('graph-canvas').attributes.get('aria-busy'), 'true')
+  assert.equal(app.captured.length, 0)
+  rendering.resolve(); await flush()
+  assert.equal(app.ids.get('graph-progress').hidden, true)
+  assert.equal(app.ids.get('graph-canvas').attributes.get('aria-busy'), 'false')
+  assert.equal(app.captured.length, 1)
+
+  rendering = pending()
+  app.submit(); await flush()
+  app.resolve(app.graphRequests[1]); await app.finish()
+  rendering.reject(new Error('Unable to create a graph canvas')); await flush()
+  assert.equal(app.ids.get('graph-progress').hidden, true)
+  assert.equal(app.ids.get('graph-result').dataset.state, 'error')
+  assert.match(app.ids.get('error-message').textContent, /Unable to create a graph canvas/)
+})
+
+test('canceling graph preparation prevents its late completion from restoring the graph UI', async t => {
+  const rendering = pending(), app = fixture(t, { renderGraph: () => rendering.promise })
+  app.input('example.org/mod'); app.submit(); await flush()
+  app.resolve(app.graphRequests[0]); await app.finish()
+  assert.equal(app.rendered.length, 1)
+  app.ids.get('cancel-graph-loading').dispatchEvent(event('click')); await flush()
+  rendering.resolve(); await flush()
+  assert.equal(app.ids.get('graph-result').dataset.state, 'empty')
+  assert(app.ids.get('left-panel').classes.has('left-panel-empty'))
+  assert.equal(app.captured.length, 0)
 })
 
 test('built-in lens validation accepts canonical results including a zero Scorecard score', async t => {

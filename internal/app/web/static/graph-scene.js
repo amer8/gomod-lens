@@ -21,7 +21,7 @@ export function fitCamera(positions, width, height, padding = 48) {
 }
 
 export function createGraphScene(container, model, options = {}) {
-  let disposed = false, frame = null, width = 1, height = 1, pixelRatio = 0, fitted = false
+  let disposed = false, frame = null, width = 0, height = 0, pixelRatio = 0
   const abort = new AbortController(), pointers = new Map()
   const createCanvas = () => {
     const canvas = document.createElement('canvas')
@@ -53,13 +53,16 @@ export function createGraphScene(container, model, options = {}) {
     Object.assign(camera, value); camera.scale = clamp(camera.scale, 0.08, 40)
     model.setZoom(camera.scale); backdrop(); requestRender()
   }
-  function fit() { fitted = true; setCamera(fitCamera(model.positions, width, height)) }
+  function fit() { setCamera(fitCamera(model.positions, width, height)) }
   function resize() {
     if (disposed) return
     const box = container.getBoundingClientRect()
+    const previousWidth = width, previousHeight = height, initial = pixelRatio === 0
     width = Math.max(1, box.width); height = Math.max(1, box.height); pixelRatio = Math.min(globalThis.devicePixelRatio || 1, 2)
     size(canvas); size(labelsCanvas)
-    if (fitted) fit(); else setCamera({ x: width / 2, y: height / 2 })
+    if (initial) fit()
+    // Keep the same world point at the center and retain the user's zoom.
+    else setCamera({ x: camera.x + (width - previousWidth) / 2, y: camera.y + (height - previousHeight) / 2 })
   }
   function draw() {
     if (disposed) return

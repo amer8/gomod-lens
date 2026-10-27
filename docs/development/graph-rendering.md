@@ -22,9 +22,13 @@ use the same text collision suppression and zoom-dependent detail.
 
 Positions and styles upload when changed. Panning within a detail level updates
 only the GPU camera uniform. Rendering stops when the scene is unchanged.
-The production force solver spreads steps across animation frames and stops
-when stable or after 12 seconds. WebGPU accelerates drawing; layout mathematics,
-network resolution and evidence fetches still run on the CPU.
+The production force solver warms up for up to 120 steps before the first
+visible graph, using 8 ms batches across animation frames. The loading view
+stays active during preparation. The camera fits those initial positions once;
+remaining layout steps stop when stable or after 12 seconds, without refitting
+the camera or snapping the displayed positions to the solver. Resizing retains
+the zoom and the world point at the viewport center. WebGPU accelerates drawing;
+layout mathematics, network resolution and evidence fetches still run on the CPU.
 
 ## Checks
 
@@ -47,8 +51,9 @@ node tools/graph-benchmark/run.mjs --verify
 ```
 
 This checks actual GPU rendering, node selection, mouse pan/zoom, touch gesture
-math, 390-pixel resizing, device-loss fallback, refused adapters and cancellation
-of pending GPU initialization.
+math, 390-pixel resizing with preserved pan/zoom, camera stability at the layout
+timeout, canceled layout preparation, device-loss fallback, refused adapters
+and cancellation of pending GPU initialization.
 
 Set `PLAYWRIGHT_MODULE=/absolute/path/to/node_modules/playwright` when Playwright
 is supplied by a separate runtime. On macOS the runner defaults to Google

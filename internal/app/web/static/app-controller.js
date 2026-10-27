@@ -209,9 +209,10 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
       if (graphController !== own || own.signal.aborted) return
       syncResolvedTarget(payload?.meta?.target || target)
       setGraphResult(renderSidebar(payload))
-      renderGraph(elements.graphCanvas, payload, { onNodeSelected(node) {
+      await renderGraph(elements.graphCanvas, payload, { onNodeSelected(node) {
         selectNode(node?.id || ''); analysisViews.select(node)
       } })
+      if (graphController !== own || own.signal.aborted) return
       setLoading(false); setError(''); setGraphLoaded(true)
       void versionPicker.capture(payload); void analysisViews.capture(payload)
     } catch (error) {
