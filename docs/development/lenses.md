@@ -192,9 +192,12 @@ successful module results. An empty successful lookup is a separate outcome.
 built-in graph coloring. It creates the toolbar once and builds panels directly
 for each graph. The sidebar renderer supplies summary groups and distributions.
 
-Modules are imported when the browser controller starts. Keep DOM work and
-network requests out of module initialization. The controller calls `load`
-when a view opens; the assistant may also request its data as evidence. Results
+Modules are imported independently when their view first opens or the assistant
+requests their evidence. An import failure shows an error in that lens's panel;
+Refresh retries the import, while other lenses remain usable. A pending import
+does not delay other panels. Keep DOM work and network requests out of module
+initialization. The controller calls `load` when a view opens; the assistant may
+also request its data as evidence. Results
 are reused per graph, or per node with `selection: true`; selecting a module in
 an inventory rerenders without fetching the whole inventory again.
 

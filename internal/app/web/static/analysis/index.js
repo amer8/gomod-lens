@@ -10,13 +10,11 @@ import { renderDistribution } from '../sidebar-view.js'
 // modules listed by registry.js; adding a view does not require editing this file.
 // capture -> choose -> load -> render; stop aborts work when the graph changes.
 // See docs/development/lenses.md for ownership, caching and contribution recipes.
-export function createAnalysisViews({ selectNode, setGraphLens, setColors, highlight }) {
-  const ready = Promise.all(browserLenses.map(async registration => ({
-    ...(await registration.importModule()).default,
-    ...registration,
-  })))
+export function createAnalysisViews({ selectNode, setGraphLens, setColors, highlight, createAssistant = createGraphAssistant }) {
+  const modules = browserLenses.map(registration => ({ scope: registration.description, ...registration }))
+  const imports = new Map(), failedImports = new Set()
   let graph = null, selected = '', generation = 0, controller = null
-  let modules = [], active = null
+  let active = null
   let preferred = selectedLens(new URLSearchParams(window.location.search).get('lens'))
   const panels = new Map(), results = new Map(), requests = new Map(), states = new Map()
   window.history.replaceState(window.history.state, '', lensURL(window.location.href, preferred))
@@ -35,20 +33,46 @@ export function createAnalysisViews({ selectNode, setGraphLens, setColors, highl
   add.target = '_blank'; add.rel = 'noreferrer'; add.setAttribute('aria-label', 'Learn how to add a lens')
   switcher.append(add); heading.append(element('h4', 'Lenses'), switcher); toolbar.replaceChildren(heading)
   const resetLensTooltip = createLensTooltip(toolbar, app)
-  const assistant = createGraphAssistant({ app, select, highlight,
+  const assistant = createAssistant({ app, select, highlight,
     openLens: choose,
     async loadEvidence(id, nodeID, signal) {
       const module = modules.find(value => value.id === id)
       if (!module || !graph || !controller) throw new Error('Load a module graph first.')
-      const capturedGraph = graph, node = graph.nodes.find(value => value.id === nodeID)
+      const capturedGraph = graph, capturedController = controller, node = graph.nodes.find(value => value.id === nodeID)
       if (!node) throw new Error('The selected module is no longer in this graph.')
+      await importLens(module)
+      signal.throwIfAborted(); capturedController.signal.throwIfAborted()
       const key = module.selection ? module.key + ':' + nodeID : module.key
       if (requests.has(key)) await requests.get(key)
       signal.throwIfAborted()
       if (results.has(key)) return results.get(key)
-      return module.load(capturedGraph, { node, signal: AbortSignal.any([signal, controller.signal]), progress() {} })
+      return module.load(capturedGraph, { node, signal: AbortSignal.any([signal, capturedController.signal]), progress() {} })
     },
   })
+  // Share imports for one lens without making other panels wait for it.
+  function importLens(module) {
+    if (module.load) return Promise.resolve()
+    if (!imports.has(module.key)) {
+      const registration = browserLenses.find(value => value.id === module.id)
+      const request = Promise.resolve().then(() => registration.importModule()).then(({ default: lens }) => {
+        if (typeof lens?.load !== 'function' || typeof lens?.render !== 'function' || typeof lens?.scope !== 'string') {
+          throw new Error('The lens module could not be initialized.')
+        }
+        Object.assign(module, lens, registration)
+        failedImports.delete(module.key)
+      }).finally(() => imports.delete(module.key))
+      imports.set(module.key, request)
+    }
+    return imports.get(module.key)
+  }
+  function configurePanel(panel, module) {
+    panel.querySelector('.analysis-eyebrow').textContent = module.scope || ''
+    if ((!module.selection && !module.modulePicker) || panel.querySelector('.analysis-module-select')) return
+    const selectInput = element('select', undefined, 'analysis-module-select'); selectInput.setAttribute('aria-label', 'Module to inspect')
+    graph.nodes.forEach(node => selectInput.append(new Option(node.name + (node.version ? '@' + node.version : ''), node.id)))
+    selectInput.addEventListener('change', () => select(selectInput.value))
+    panel.insertBefore(selectInput, panel.querySelector('.analysis-status'))
+  }
   function syncAssistant() { if (graph && controller) assistant.setContext({ graph, selected, lens: preferred }) }
   app.dataset.analysisLens = preferred
   // Abort upstream work and invalidate completions from the previous graph.
@@ -97,6 +121,7 @@ export function createAnalysisViews({ selectNode, setGraphLens, setColors, highl
     paint(); void render(module)
   }
   function paint() {
+    if (failedImports.has(active?.key)) { setColors({}); return }
     const data = results.get(active?.key)
     setColors(active?.colors && data ? active.colors(graph, data, selected, states.get(active.key) || {}) : null)
   }
@@ -116,6 +141,24 @@ export function createAnalysisViews({ selectNode, setGraphLens, setColors, highl
   }
   async function render(module, refresh = false) {
     const panel = panels.get(module.key); if (!panel || !graph) return
+    if (!module.load) {
+      const current = generation
+      panel.querySelector('.analysis-body').replaceChildren(notice('Loading this lens…'))
+      panel.querySelector('.analysis-status').textContent = 'Loading lens…'
+      panel.querySelector('.analysis-refresh').disabled = true; panel.setAttribute('aria-busy', 'true')
+      try { await importLens(module) }
+      catch {
+        if (current !== generation) return
+        failedImports.add(module.key)
+        panel.querySelector('.analysis-body').replaceChildren(notice('This lens could not be loaded. Check your connection and select Refresh to try again.', 'analysis-empty'))
+        panel.querySelector('.analysis-status').textContent = 'Lens unavailable · refresh to retry'
+        panel.querySelector('.analysis-refresh').disabled = false; panel.removeAttribute('aria-busy')
+        if (active === module) paint()
+        return
+      }
+      if (current !== generation) return
+    }
+    configurePanel(panel, module)
     // Repository reports load per selection; inventories load once per graph.
     const requestKey = module.selection ? module.key + ':' + selected : module.key
     if (refresh) { clearPublicCache(); assistant.invalidate(module.id, selected); results.delete(requestKey); results.delete(module.key); paint() }
@@ -168,9 +211,6 @@ export function createAnalysisViews({ selectNode, setGraphLens, setColors, highl
     select(node) { if (node?.id) select(node.id) },
     async capture(payload) {
       stop(); graph = payload; selected = payload.rootId; controller = new AbortController()
-      const current = generation
-      modules = await ready
-      if (current !== generation) return
       const host = document.getElementById('graph-result')?.querySelector('.packageInfo')
       if (!host) return
       const root = element('div', undefined, 'all-licenses lens-section')
@@ -192,13 +232,9 @@ export function createAnalysisViews({ selectNode, setGraphLens, setColors, highl
         controls.append(expand, retry); head.append(title, controls)
         const selectedName = element('div', undefined, 'analysis-selected-name')
         panel.append(head, selectedName)
-        if (module.selection || module.modulePicker) {
-          const selectInput = element('select', undefined, 'analysis-module-select'); selectInput.setAttribute('aria-label', 'Module to inspect')
-          payload.nodes.forEach(node => selectInput.append(new Option(node.name + (node.version ? '@' + node.version : ''), node.id)))
-          selectInput.addEventListener('change', () => select(selectInput.value)); panel.append(selectInput)
-        }
         const status = notice('', 'analysis-status'); status.setAttribute('role', 'status')
         panel.append(status, element('div', undefined, 'analysis-body'))
+        configurePanel(panel, module)
         const groups = payload.viewModel?.lensGroups?.[module.id]
         if (groups?.length) panel.append(renderDistribution(module.id, groups))
         panels.set(module.key, panel)
