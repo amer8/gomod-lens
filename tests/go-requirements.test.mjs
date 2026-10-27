@@ -1,8 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import lens from '../internal/app/web/static/analysis/go-requirements.js'
-import { classifyRequirement, compareGoVersions, defaultTarget, goModURL, lookupGoRequirements, readGoMinimum, requirementColors, requirementPath, requirementSummary, requirementVersionColors, targetGoVersion } from '../internal/app/web/static/analysis/go-requirements-data.js'
-import { clearPublicCache } from '../internal/app/web/static/analysis/public-data.js'
+import { classifyRequirement, compareGoVersions, defaultTarget, goModURL, lookupGoRequirements, requirementColors, requirementPath, requirementSummary, requirementVersionColors, targetGoVersion } from '../internal/app/web/static/analysis/go-requirements-data.js'
 
 const root = Object.freeze({ id: 'root', name: 'example.org/root', version: 'v1.0.0' })
 const dependency = Object.freeze({ id: 'dep', name: 'example.org/dependency', version: 'v2.0.0' })
@@ -13,13 +12,6 @@ const data = { records: new Map([
   ['dep', { status: 'observed', minimum: '1.27.0', implicit: false }],
   ['unknown', { status: 'unknown', error: 'offline' }],
 ]) }
-
-test('minimum parsing handles comments, quoted versions and implicit legacy minimums', () => {
-  assert.deepEqual(readGoMinimum('module example.org/a\ngo 1.26.7 // minimum\ntoolchain go1.27.3'), { minimum: '1.26.7', implicit: false })
-  assert.deepEqual(readGoMinimum('/* go 1.99 */\nmodule "example.org/a"\ngo "1.26"\n// go 1.28'), { minimum: '1.26', implicit: false })
-  assert.deepEqual(readGoMinimum('module "example.org/go//path"\n// go 1.99\ntoolchain go1.27.3'), { minimum: '1.16', implicit: true })
-  for (const body of ['', '<html>error</html>', 'module x\ngo invalid', 'module x\ngo 1.26\ngo 1.27', 'module x\ngo', 'module x\n/* unfinished', 'module x\ngo 1.026', 'module x\ngo go1.26', 'module x\ngo"1.26"']) assert.throws(() => readGoMinimum(body), body)
-})
 
 test('Go versions compare numerically with Go language, beta, RC and patch ordering', () => {
   const versions = ['1.20rc2', '1.20', '1.20.1', '1.21', '1.21beta1', '1.21beta2', '1.21rc1', '1.21rc10', '1.21.0', '1.21.1', '1.26.9', '1.26.10', '1.27rc1', '1.27.0']
@@ -43,43 +35,84 @@ test('an older minimum is satisfied, while patch and prerelease requirements rem
   assert.equal(classifyRequirement(record('1.26'), ''), 'unknown')
 })
 
-test('lookup reads exact resolved replacement versions and retains source evidence on failures', async () => {
-  clearPublicCache()
-  const replaced = { id: 'fork', name: 'original.org/lib', version: 'v1.0.0', replaced: true, replacement: 'github.com/Acme/Fork@v2.0.0+incompatible' }
-  const local = { id: 'local', name: 'original.org/local', version: 'v1.0.0', replaced: true, replacement: '../private' }
-  const missing = { id: 'missing', name: 'original.org/missing' }
-  const requests = []
-  const result = await lookupGoRequirements({ nodes: [root, replaced, local, missing, unknown] }, { fetcher: async (url, options) => {
-    requests.push(url)
-    assert.equal(options.credentials, 'omit')
-    assert(options.signal)
-    if (url.includes('/unknown/')) return { ok: false, status: 503 }
-    // A fork can retain the original module declaration. Source URL identity matters.
-    return { ok: true, text: async () => 'module original.org/lib\ngo 1.20\ntoolchain go1.27.3' }
-  } })
-  assert.equal(requests.length, 3)
-  assert(requests.includes('https://proxy.golang.org/github.com/!acme/!fork/@v/v2.0.0%2Bincompatible.mod'))
-  assert.deepEqual(result.records.get('fork').identity, { name: 'github.com/Acme/Fork', version: 'v2.0.0+incompatible' })
-  assert.equal(result.records.get('fork').minimum, '1.20')
-  assert(result.records.get('fork').observedAt)
-  assert.equal(result.records.get('local').status, 'unknown')
-  assert.equal(result.records.get('missing').status, 'unknown')
-  assert.equal(result.records.get('unknown').status, 'unknown')
-  assert.match(result.records.get('unknown').error, /503/)
-  assert.match(result.records.get('unknown').source, /v1.0.0.mod$/)
-  assert.match(goModURL({ name: 'example.org/A', version: 'v1.0.0-RC1' }), /!a\/@v\/v1.0.0-!r!c1.mod$/)
+const observation = (node, minimum = '1.26') => ({ status: 'observed', minimum, implicit: false, identity: { name: node.name, version: node.version }, source: goModURL(node), observedAt: '2026-10-27T10:00:00Z' })
+
+test('graph metadata is reused and only missing exact versions go to WASM', async () => {
+  const seededRoot = Object.freeze({ ...root, goRequirement: observation(root) })
+  const snapshot = Object.freeze({ ...graph, nodes: Object.freeze([seededRoot, dependency, unknown]) })
+  const calls = []
+  const lookup = async (nodes, options) => {
+    calls.push(nodes.map(node => node.id))
+    options.onProgress({ done: nodes.length, total: nodes.length })
+    return { records: Object.fromEntries(nodes.map(node => [node.id, observation(node, '1.27.0')])) }
+  }
+  const progress = []
+  const result = await lookupGoRequirements(snapshot, { lookup, progress: (done, total) => progress.push([done, total]) })
+  assert.deepEqual(calls, [['dep', 'unknown']])
+  assert.equal(result.records.get('root').minimum, '1.26')
+  assert.equal(result.records.get('root').observedAt, seededRoot.goRequirement.observedAt)
+  assert.equal(result.records.get('dep').minimum, '1.27.0')
+  assert.deepEqual(progress.at(-1), [3, 3])
+  result.records.get('dep').minimum = '1.99'
+  const again = await lookupGoRequirements(snapshot, { lookup })
+  assert.equal(calls.length, 1, 'supplemental metadata is reused without mutating the graph')
+  assert.equal(again.records.get('dep').minimum, '1.27.0')
+  assert.equal(dependency.goRequirement, undefined)
 })
 
-test('malformed metadata remains unknown and cancellation cannot complete a stale lookup', async () => {
-  clearPublicCache()
-  const invalid = await lookupGoRequirements(graph, { fetcher: async () => ({ ok: true, text: async () => '<html>upstream failed</html>' }) })
-  assert([...invalid.records.values()].every(record => record.status === 'unknown' && !record.minimum))
-  clearPublicCache()
-  const controller = new AbortController()
-  await assert.rejects(lookupGoRequirements(graph, { signal: controller.signal, fetcher: async () => {
+test('Refresh replaces seeded and supplemental observations, including failed results', async () => {
+  const node = { ...root, goRequirement: observation(root) }, snapshot = { nodes: [node] }
+  assert.equal((await lookupGoRequirements(snapshot)).records.get('root').minimum, '1.26')
+  let refreshOption
+  const refreshed = await lookupGoRequirements(snapshot, { refresh: true, lookup: async (_, options) => {
+    refreshOption = options.refresh
+    return { records: { root: observation(root, '1.26.7') } }
+  } })
+  assert.equal(refreshOption, true)
+  assert.equal(refreshed.records.get('root').minimum, '1.26.7')
+  assert.equal((await lookupGoRequirements(snapshot)).records.get('root').minimum, '1.26.7')
+  const failed = await lookupGoRequirements(snapshot, { refresh: true, lookup: async () => { throw new Error('HTTP 503') } })
+  assert.equal(failed.records.get('root').status, 'unknown')
+  assert.match(failed.records.get('root').error, /503/)
+})
+
+test('an older supplemental lookup cannot overwrite observations from Refresh', async () => {
+  const snapshot = { nodes: [root] }
+  let completeOld
+  const old = lookupGoRequirements(snapshot, { lookup: () => new Promise(resolve => { completeOld = resolve }) })
+  await lookupGoRequirements(snapshot, { refresh: true, lookup: async () => ({ records: { root: observation(root, '1.26.7') } }) })
+  completeOld({ records: { root: observation(root, '1.26') } }); await old
+  assert.equal((await lookupGoRequirements(snapshot)).records.get('root').minimum, '1.26.7')
+})
+
+test('lookup preserves resolved replacements, skips local identities and rejects mismatched observations', async () => {
+  const replaced = { id: 'fork', name: 'original.org/lib', version: 'v1.0.0', replaced: true, replacement: 'github.com/Acme/Fork@v2.0.0+incompatible', goRequirement: observation(root) }
+  const local = { id: 'local', name: 'original.org/local', version: 'v1.0.0', replaced: true, replacement: '../private' }
+  const missing = { id: 'missing', name: 'original.org/missing' }
+  const result = await lookupGoRequirements({ nodes: [replaced, local, missing, unknown] }, { lookup: async nodes => {
+    assert.deepEqual(nodes.map(node => node.id), ['fork', 'unknown'])
+    const identity = { name: 'github.com/Acme/Fork', version: 'v2.0.0+incompatible' }
+    return { records: { fork: { ...observation(identity, '1.20'), identity }, unknown: observation(root) } }
+  } })
+  assert.deepEqual(result.records.get('fork').identity, { name: 'github.com/Acme/Fork', version: 'v2.0.0+incompatible' })
+  assert.equal(result.records.get('fork').minimum, '1.20')
+  for (const id of ['local', 'missing', 'unknown']) assert.equal(result.records.get(id).status, 'unknown')
+  assert.match(result.records.get('fork').source, /!acme\/!fork\/@v\/v2.0.0%2Bincompatible.mod$/)
+})
+
+test('cancellation and incomplete WASM results cannot publish successful observations', async () => {
+  for (const response of [null, { records: {} }]) {
+    const invalid = await lookupGoRequirements(graph, { lookup: async () => response })
+    assert([...invalid.records.values()].every(record => record.status === 'unknown' && !record.minimum))
+  }
+  const controller = new AbortController(), snapshot = { nodes: [root] }
+  await assert.rejects(lookupGoRequirements(snapshot, { signal: controller.signal, lookup: async () => {
     controller.abort()
-    return { ok: true, text: async () => 'module example.org/a\ngo 1.26' }
+    return { records: { root: observation(root) } }
   } }), { name: 'AbortError' })
+  let requests = 0
+  await lookupGoRequirements(snapshot, { lookup: async () => { requests++; return { records: { root: observation(root) } } } })
+  assert.equal(requests, 1, 'a canceled lookup must not enter the snapshot cache')
   await assert.rejects(lens.load({ nodes: [] }, { signal: controller.signal }), { name: 'AbortError' })
 })
 

@@ -16,6 +16,7 @@ weights retain their respective licenses.
 | Material | Full license text |
 | --- | --- |
 | Go runtime and standard library | [Go BSD license](internal/app/web/static/licenses/Go.txt) |
+| Go module parser (`golang.org/x/mod`) | [BSD-3-Clause](internal/app/web/static/licenses/golang-x-mod.txt) |
 | WebLLM and the selected catalog configuration | [Apache-2.0](internal/app/web/static/licenses/Apache-2.0.txt) |
 | OpenSSF Scorecard report data | [CDLA-Permissive-2.0](internal/app/web/static/licenses/CDLA-Permissive-2.0.txt) |
 | deps.dev-generated data, Go and GitHub advisory records | [CC-BY-4.0](internal/app/web/static/licenses/CC-BY-4.0.txt) |
@@ -39,7 +40,9 @@ and [Phi-4-mini license](https://huggingface.co/microsoft/Phi-4-mini-instruct/bl
 
 ## Go Dependencies
 
-This module currently has no third-party Go dependencies.
+| Module | Version | License | Use |
+| --- | --- | --- | --- |
+| [golang.org/x/mod](https://pkg.go.dev/golang.org/x/mod) | `v0.37.0` | BSD-3-Clause | Shared `go.mod` parsing for dependency resolution and Go requirements in WASM |
 
 ## Browser Runtime Dependencies
 

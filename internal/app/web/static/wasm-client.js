@@ -18,6 +18,16 @@ export async function searchModules(query, limit = 6, signal = undefined) {
   }), signal)
 }
 
+export async function loadGoRequirements(nodes, { signal, refresh = false, onProgress } = {}) {
+  signal?.throwIfAborted()
+  await ensureRuntime()
+  signal?.throwIfAborted()
+  const identities = nodes.map(({ id, name, version, replaced, replacement }) => ({ id, name, version, replaced, replacement }))
+  const payload = await withAbort(window.gomodLensLoadGoRequirements(JSON.stringify(identities), { signal, refresh, onProgress }), signal)
+  signal?.throwIfAborted()
+  return payload
+}
+
 async function ensureRuntime() {
   if (runtimeReady) return runtimeReady
 
@@ -62,7 +72,8 @@ async function waitForRuntimeExports() {
     if (
       window.gomodLensWASMReady &&
       typeof window.gomodLensResolveGraph === 'function' &&
-      typeof window.gomodLensSearchModules === 'function'
+      typeof window.gomodLensSearchModules === 'function' &&
+      typeof window.gomodLensLoadGoRequirements === 'function'
     ) {
       return
     }

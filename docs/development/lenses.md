@@ -75,7 +75,7 @@ Find the implementation you need before changing the controller:
 | Freshness (`release-freshness` → `freshness`) | `analysis/freshness.js`: `readFreshness`, `freshnessRecord`, `render` | `internal/graph/release_freshness.go`; `internal/staticresolver/release_freshness.go` | `tests/analysis-views.test.mjs` |
 | Vulnerabilities (`vulnerabilities` → `vulnerabilities`) | `analysis/vulnerabilities.js`: `lookupVulnerabilities`, `groupAdvisories`, `render` | No Go enrichment; OSV observations stay in the browser | `tests/vulnerability-exposure.test.mjs` |
 | Licenses (`licenses` → `licenses`) | `analysis/licenses.js`: `lookupLicenses`, `licenseObservation`, `licenseColors`, `render` | No Go enrichment; deps.dev observations stay in the browser | `tests/license-evidence.test.mjs` |
-| Go requirements (`go-requirements` → `go-requirements`) | `analysis/go-requirements.js`: panel; `go-requirements-data.js`: `readGoMinimum`, `lookupGoRequirements`, `requirementColors` | No Go enrichment; reads exact-version `.mod` files in the browser | `tests/go-requirements.test.mjs` |
+| Go requirements (`go-requirements` → `go-requirements`) | `analysis/go-requirements.js`: panel; `go-requirements-data.js`: `lookupGoRequirements`, `requirementColors` | `staticresolver/gomod.go` shares the Go module parser; `go_requirements.go` loads missing exact versions through WASM | `tests/go-requirements.test.mjs`; `internal/staticresolver/go_requirements_test.go` |
 
 An `id` is used in `?lens=...`, panel attributes and graph lens results.
 A `key` identifies the controller's state and data cache. Keep existing values
@@ -212,6 +212,15 @@ Refresh clears the shared public fetch cache and reloads the active result
 (the current node for a selection-scoped view). Freshness has no browser fetch:
 its Refresh rereads metadata already present in the graph. It does not trigger
 a fresh Go module mirror lookup or bypass the IndexedDB upstream cache.
+
+Go requirements reuses each node's `goRequirement` observation when its resolved
+identity matches. Missing exact versions use `gomodLensLoadGoRequirements` and
+the same Go parser as graph resolution. Supplemental observations are cached
+per graph without mutating its nodes. The load context's `refresh` flag forces
+all public identities to reload and bypasses IndexedDB for that request.
+Local replacements remain unknown. `descendantCount` is computed once in Go
+and shared by sidebar groups and renderer sizing; JavaScript traversal remains
+a fallback for legacy payloads and synthetic fixtures.
 
 `publicJSON` and `publicText` provide a five-minute memory cache, 20-second
 request timeout and credential-free requests. Use `publicText` for `.mod`

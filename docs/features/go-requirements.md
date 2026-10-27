@@ -6,7 +6,9 @@ Select **Go requirements** (`Go`) after loading a public module, or open:
 http://localhost:4173/?lens=go-requirements#target=github.com%2Fspf13%2Fcobra%40v1.10.2
 ```
 
-The lens reads each resolved version's `go.mod` from the Go module mirror.
+The lens reuses Go minimums already parsed during graph resolution. It asks
+Go/WASM to read and parse only missing exact versions from the Go module mirror,
+then keeps those observations with the current graph in browser memory.
 Public replacements use their resolved identities; local replacements and
 unavailable metadata remain unknown. Results stay in the browser.
 
@@ -55,7 +57,8 @@ and provenance are under **About this data**.
 
 Changing the target recomputes the comparison locally without
 new requests. The target and filters survive module/lens selection; a new root
-or version resets them. Refresh retries metadata requests. See
+or version resets them. Refresh requests all public exact versions again,
+bypassing the reusable graph metadata and IndexedDB response cache. See
 [PRIVACY.md](../../PRIVACY.md) for external request details.
 
 ## Reproduction and checks

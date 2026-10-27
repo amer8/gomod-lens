@@ -20,6 +20,13 @@ test('WASM client shares initialization and forwards graph, search, progress and
           assert.equal(query, 'a/b'); assert.equal(limit, 6); assert.equal(options.signal, controller.signal)
           return results
         }
+        window.gomodLensLoadGoRequirements = async (nodes, options) => {
+          assert.deepEqual(JSON.parse(nodes), [{ id: 'root', name: 'example.org/root', version: 'v1.0.0' }])
+          assert.equal(options.signal, controller.signal)
+          assert.equal(options.refresh, true)
+          options.onProgress({ done: 1, total: 1 })
+          return { records: { root: { status: 'observed', minimum: '1.26' } } }
+        }
         return new Promise(() => {})
       }
     },
@@ -43,6 +50,11 @@ test('WASM client shares initialization and forwards graph, search, progress and
   assert.equal(requests[0].target, 'example.org/mod@v1.0.0')
   assert.equal(requests[0].options.signal, controller.signal)
   assert.equal(requests[0].options.onProgress, progress)
+  let metadataProgress
+  assert.equal((await client.loadGoRequirements([{ id: 'root', name: 'example.org/root', version: 'v1.0.0', lenses: { unrelated: true } }], {
+    signal: controller.signal, refresh: true, onProgress: value => { metadataProgress = value },
+  })).records.root.minimum, '1.26')
+  assert.deepEqual(metadataProgress, { done: 1, total: 1 })
   const loading = client.loadGraph('pending', { signal: controller.signal })
   await new Promise(setImmediate)
   controller.abort()

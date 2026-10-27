@@ -27,17 +27,36 @@ type GraphMeta struct {
 
 // Node represents a module version in the dependency graph.
 type Node struct {
-	ID          string      `json:"id"`
-	Name        string      `json:"name"`
-	Version     string      `json:"version,omitempty"`
-	Root        bool        `json:"root"`
-	Main        bool        `json:"main"`
-	Direct      bool        `json:"direct"`
-	Replaced    bool        `json:"replaced"`
-	Replacement string      `json:"replacement,omitempty"`
-	InDegree    int         `json:"inDegree"`
-	OutDegree   int         `json:"outDegree"`
-	Lenses      LensResults `json:"lenses,omitempty"`
+	ID              string         `json:"id"`
+	Name            string         `json:"name"`
+	Version         string         `json:"version,omitempty"`
+	Root            bool           `json:"root"`
+	Main            bool           `json:"main"`
+	Direct          bool           `json:"direct"`
+	Replaced        bool           `json:"replaced"`
+	Replacement     string         `json:"replacement,omitempty"`
+	InDegree        int            `json:"inDegree"`
+	OutDegree       int            `json:"outDegree"`
+	DescendantCount *int           `json:"descendantCount,omitempty"`
+	GoRequirement   *GoRequirement `json:"goRequirement,omitempty"`
+	Lenses          LensResults    `json:"lenses,omitempty"`
+}
+
+// ModuleIdentity is the public module/version used to obtain metadata.
+type ModuleIdentity struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+}
+
+// GoRequirement records the minimum from one exact version's go.mod file.
+type GoRequirement struct {
+	Status     string         `json:"status"`
+	Minimum    string         `json:"minimum,omitempty"`
+	Implicit   bool           `json:"implicit"`
+	Identity   ModuleIdentity `json:"identity"`
+	Source     string         `json:"source,omitempty"`
+	ObservedAt string         `json:"observedAt,omitempty"`
+	Error      string         `json:"error,omitempty"`
 }
 
 // LensDefinition describes a graph analysis lens available on a graph.

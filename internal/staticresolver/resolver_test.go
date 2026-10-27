@@ -136,7 +136,7 @@ func TestResolveGraphAllowsLargeBrowserGraph(t *testing.T) {
 }
 
 func TestParseGoModHandlesReplacementAndIndirectComment(t *testing.T) {
-	meta := parseGoMod(`module example.com/root
+	meta, err := parseGoMod(`module example.com/root
 
 require (
 	example.com/direct v1.0.0
@@ -150,6 +150,9 @@ exclude (
 	example.com/other v0.9.0
 )
 `)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if meta.ModulePath != "example.com/root" {
 		t.Fatalf("module path = %q", meta.ModulePath)
@@ -256,7 +259,7 @@ func TestResolveGraphPrunesTransitiveRequirementsForModernModules(t *testing.T) 
 }
 
 func TestResolveGraphKeepsTransitiveRequirementsForUnprunedModules(t *testing.T) {
-	for _, version := range []string{"1.16", "1.17.0junk", "1.17.0-custom1", "2"} {
+	for _, version := range []string{"1.14", "1.15", "1.16"} {
 		t.Run(version, func(t *testing.T) {
 			fetcher := fakeFetcher{
 				proxyModuleURL("example.com/root") + "/@latest":            `{"Version":"v1.0.0"}`,
@@ -306,7 +309,10 @@ func TestCompareGoVersions(t *testing.T) {
 }
 
 func TestParseGoModCapturesGoDirective(t *testing.T) {
-	meta := parseGoMod("module example.com/root\n\ngo 1.25.0\n")
+	meta, err := parseGoMod("module example.com/root\n\ngo 1.25.0\n")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if meta.GoVersion != "1.25.0" {
 		t.Fatalf("go version = %q, want 1.25.0", meta.GoVersion)
 	}

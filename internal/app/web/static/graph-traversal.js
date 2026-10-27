@@ -38,9 +38,12 @@ export function reachableIDs(outgoing, start) {
 
 export function dependencyCounts(payload) {
   const nodes = payload?.nodes || []
+  const validCount = node => Number.isInteger(node.descendantCount) && node.descendantCount >= 0 && node.descendantCount < nodes.length
+  if (nodes.every(validCount)) return new Map(nodes.map(node => [node.id, node.descendantCount]))
   const nodeByID = new Map(nodes.map(node => [node.id, node]))
   // Root nodes stop dependency traversal; they are not downstream dependencies.
   const outgoing = outgoingIndex((payload?.edges || []).filter(edge =>
     nodeByID.has(edge.source) && nodeByID.has(edge.target) && !nodeByID.get(edge.target).root))
-  return new Map(nodes.map(node => [node.id, reachableIDs(outgoing, node.id).size - 1]))
+  // Legacy and synthetic fixtures can omit the WASM-computed counts.
+  return new Map(nodes.map(node => [node.id, validCount(node) ? node.descendantCount : reachableIDs(outgoing, node.id).size - 1]))
 }

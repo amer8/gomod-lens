@@ -32,8 +32,9 @@ type Response struct {
 	ViewModel Model `json:"viewModel"`
 }
 
-// NewResponse prepares the shared browser response without changing graph fields.
+// NewResponse supplies shared analysis and sidebar data without mutating its input.
 func NewResponse(g graph.Graph) Response {
+	g = graph.WithDescendantCounts(g)
 	return Response{Graph: g, ViewModel: New(g)}
 }
 
@@ -60,6 +61,7 @@ type GroupEntry struct {
 
 // New creates a view model from a dependency graph.
 func New(g graph.Graph) Model {
+	g = graph.WithDescendantCounts(g)
 	return Model{
 		RelationGroups: RelationGroups(g),
 		LensGroups: map[string][]GroupEntry{
@@ -307,6 +309,10 @@ func dependencyNodeCountForNames(g graph.Graph) map[string]int {
 	nodeByID, nodeIDsByName, dependencyIDsByID := buildDependencyIndex(g)
 	counts := make(map[string]int, len(nodeIDsByName))
 	for name, ids := range nodeIDsByName {
+		if len(ids) == 1 && nodeByID[ids[0]].DescendantCount != nil {
+			counts[name] = *nodeByID[ids[0]].DescendantCount
+			continue
+		}
 		counts[name] = reachableDependencyNodeCount(ids, dependencyIDsByID, nodeByID)
 	}
 	return counts

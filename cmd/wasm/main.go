@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall/js"
 
+	"github.com/amer8/gomod-lens/internal/graph"
 	"github.com/amer8/gomod-lens/internal/graphview"
 	"github.com/amer8/gomod-lens/internal/staticresolver"
 )
@@ -16,6 +17,7 @@ import (
 func main() {
 	js.Global().Set("gomodLensResolveGraph", js.FuncOf(resolveGraph))
 	js.Global().Set("gomodLensSearchModules", js.FuncOf(searchModules))
+	js.Global().Set("gomodLensLoadGoRequirements", js.FuncOf(loadGoRequirements))
 	js.Global().Set("gomodLensWASMReady", true)
 	select {}
 }
@@ -58,6 +60,35 @@ func searchModules(_ js.Value, args []js.Value) any {
 			return
 		}
 		resolve.Invoke(toJS(results))
+	})
+}
+
+func loadGoRequirements(_ js.Value, args []js.Value) any {
+	raw := stringArg(args, 0)
+	options := objectArg(args, 1)
+	return newPromise(func(resolve, reject js.Value) {
+		ctx, cleanup := contextFromOptions(options)
+		defer cleanup()
+		var nodes []graph.Node
+		if err := json.Unmarshal([]byte(raw), &nodes); err != nil || len(nodes) > 1500 {
+			reject.Invoke(jsError(errors.New("invalid module metadata request")))
+			return
+		}
+		refresh := options.Truthy() && options.Get("refresh").Truthy()
+		resolver := staticresolver.New(browserFetcher{signal: signalFromOptions(options), refresh: refresh, timeoutMillis: 20000})
+		result, err := resolver.LookupGoRequirements(ctx, nodes, func(done, total int) {
+			if !options.Truthy() {
+				return
+			}
+			if callback := options.Get("onProgress"); callback.Type() == js.TypeFunction {
+				callback.Invoke(toJS(map[string]int{"done": done, "total": total}))
+			}
+		})
+		if err != nil {
+			reject.Invoke(jsError(err))
+			return
+		}
+		resolve.Invoke(toJS(result))
 	})
 }
 
@@ -112,15 +143,19 @@ func progressCallback(options js.Value) func(staticresolver.Progress) {
 }
 
 type browserFetcher struct {
-	signal js.Value
+	signal        js.Value
+	refresh       bool
+	timeoutMillis int
 }
 
 func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.FetchRequest) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	if body, ok := cachedResponse(ctx, request.URL); ok {
-		return body, nil
+	if !f.refresh {
+		if body, ok := cachedResponse(ctx, request.URL); ok {
+			return body, nil
+		}
 	}
 
 	init := js.Global().Get("Object").New()
@@ -129,8 +164,23 @@ func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.Fe
 		headers.Set("Accept", request.Accept)
 	}
 	init.Set("headers", headers)
-	if f.signal.Truthy() {
-		init.Set("signal", f.signal)
+	init.Set("credentials", "omit")
+	if f.refresh {
+		init.Set("cache", "reload")
+	}
+	signal := f.signal
+	if f.timeoutMillis > 0 {
+		timeout := js.Global().Get("AbortSignal").Call("timeout", f.timeoutMillis)
+		if signal.Truthy() {
+			values := js.Global().Get("Array").New()
+			values.Call("push", signal, timeout)
+			signal = js.Global().Get("AbortSignal").Call("any", values)
+		} else {
+			signal = timeout
+		}
+	}
+	if signal.Truthy() {
+		init.Set("signal", signal)
 	}
 
 	response, err := awaitPromise(ctx, js.Global().Call("fetch", request.URL, init))

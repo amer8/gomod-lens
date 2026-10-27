@@ -189,7 +189,7 @@ export function createAnalysisViews({ selectNode, setGraphLens, setColors, highl
     const current = generation, capturedGraph = graph, capturedNode = graph.nodes.find(n => n.id === selected)
     const request = (async () => {
       try {
-        const result = await module.load(capturedGraph, { node: capturedNode, signal: controller.signal, progress(done, total) { if (current === generation) status.textContent = `Loading ${done} of ${total} modules…` } })
+        const result = await module.load(capturedGraph, { node: capturedNode, signal: controller.signal, refresh, progress(done, total) { if (current === generation) status.textContent = `Loading ${done} of ${total} modules…` } })
         if (current !== generation) return
         results.set(requestKey, result)
         if (!module.selection || selected === capturedNode.id) results.set(module.key, result)

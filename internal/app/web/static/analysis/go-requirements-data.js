@@ -1,4 +1,8 @@
-import { mapModules, publicIdentity, publicText } from './public-data.js'
+import { publicIdentity } from './public-data.js'
+import { loadGoRequirements } from '../wasm-client.js'
+
+// Supplemental metadata belongs to its graph snapshot, without mutating nodes.
+const snapshots = new WeakMap()
 
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*)|(beta|rc)(0|[1-9]\d*))?$/
 
@@ -27,64 +31,50 @@ export function targetGoVersion(input) {
   return /^\d+\.\d+$/.test(value) ? value + '.0' : value
 }
 
-function withoutComments(text) {
-  let result = '', quote = '', block = false
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i], next = text[i + 1]
-    if (block) {
-      if (char === '*' && next === '/') { block = false; i++; result += ' ' }
-      else if (char === '\n') result += '\n'
-    } else if (quote) {
-      result += char
-      if (char === '\\' && quote === '"') { result += text[++i] || '' }
-      else if (char === quote) quote = ''
-      else if (char === '\n') throw new Error('Invalid quoted go.mod field')
-    } else if (char === '"' || char === '`') { quote = char; result += char }
-    else if (char === '/' && next === '*') { block = true; i++; result += ' ' }
-    else if (char === '/' && next === '/') {
-      while (i < text.length && text[i] !== '\n') i++
-      result += '\n'
-    } else result += char
-  }
-  if (block || quote) throw new Error('Unterminated go.mod comment or string')
-  return result
-}
-
-export function readGoMinimum(text) {
-  const lines = withoutComments(text).split(/\r?\n/).map(line => line.trim()).filter(Boolean)
-  const modules = lines.filter(line => /^module(?:\s|$)/.test(line))
-  if (modules.length !== 1 || !/^module\s+(?:"(?:[^"\\]|\\.)+"|[^\s"`]+)$/.test(modules[0])) throw new Error('Source did not contain a module declaration')
-  const directives = lines.filter(line => /^go(?:\s|[(["`]|$)/.test(line))
-  if (!directives.length) return { minimum: '1.16', implicit: true }
-  if (directives.length !== 1) throw new Error('Source contains multiple go directives')
-  const match = /^go\s+(.+)$/.exec(directives[0])
-  let version = match?.[1] || ''
-  if (version.startsWith('"')) {
-    try { version = JSON.parse(version) } catch { throw new Error('Invalid quoted Go version') }
-  }
-  if (!versionParts(version)) throw new Error('Source contains an invalid Go minimum')
-  return { minimum: version, implicit: false }
-}
-
 export function goModURL(identity) {
   const escape = value => value.replace(/[A-Z]/g, char => '!' + char.toLowerCase()).split('/').map(encodeURIComponent).join('/')
   return `https://proxy.golang.org/${escape(identity.name)}/@v/${escape(identity.version)}.mod`
 }
 
-export async function lookupGoRequirements(graph, { signal, progress, fetcher } = {}) {
+export async function lookupGoRequirements(graph, { signal, progress = () => {}, refresh = false, lookup = loadGoRequirements } = {}) {
   signal?.throwIfAborted()
-  const records = await mapModules(graph.nodes, async node => {
+  let snapshot = snapshots.get(graph)
+  if (!snapshot) { snapshot = { records: new Map(), generation: 0 }; snapshots.set(graph, snapshot) }
+  const generation = refresh ? ++snapshot.generation : snapshot.generation
+  const records = new Map(), missing = [], previous = snapshot.records
+  for (const node of graph.nodes) {
     const identity = publicIdentity(node)
-    if (!identity) return { status: 'unknown', error: 'No resolved public module version is available.' }
-    const source = goModURL(identity)
+    if (!identity) {
+      records.set(node.id, { status: 'unknown', error: 'No resolved public module version is available.' })
+      continue
+    }
+    const candidate = refresh ? null : previous?.get(node.id) || node.goRequirement
+    if (candidate?.status === 'observed' && versionParts(candidate.minimum) &&
+        candidate.identity?.name === identity.name && candidate.identity?.version === identity.version && candidate.source && candidate.observedAt) {
+      records.set(node.id, structuredClone(candidate))
+    } else missing.push(node)
+  }
+  const reused = records.size
+  progress(reused, graph.nodes.length)
+  if (missing.length) {
+    let response
     try {
-      const body = await publicText(source, { signal, fetcher })
-      return { status: 'observed', ...readGoMinimum(body), identity, source, observedAt: new Date().toISOString() }
+      response = await lookup(missing, { signal, refresh, onProgress: ({ done }) => progress(reused + done, graph.nodes.length) })
+      signal?.throwIfAborted()
     } catch (error) {
       signal?.throwIfAborted()
-      return { status: 'unknown', error: error.message || 'Module metadata unavailable', identity, source, observedAt: new Date().toISOString() }
+      response = { records: Object.fromEntries(missing.map(node => [node.id, { status: 'unknown', error: error.message || 'Module metadata unavailable' }])) }
     }
-  }, { signal, progress })
+    for (const node of missing) {
+      const identity = publicIdentity(node), record = response?.records?.[node.id]
+      const matches = record?.identity?.name === identity.name && record.identity?.version === identity.version
+      if (matches && record.status === 'observed' && versionParts(record.minimum) && record.source && record.observedAt) records.set(node.id, record)
+      else records.set(node.id, { status: 'unknown', identity, source: goModURL(identity), observedAt: record?.observedAt || new Date().toISOString(), error: record?.error || 'No valid exact-version metadata was returned.' })
+    }
+  }
+  signal?.throwIfAborted()
+  if (generation === snapshot.generation) snapshot.records = new Map([...records].map(([id, record]) => [id, structuredClone(record)]))
+  progress(graph.nodes.length, graph.nodes.length)
   return { records, capturedAt: new Date().toISOString() }
 }
 

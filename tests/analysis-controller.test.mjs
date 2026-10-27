@@ -152,3 +152,13 @@ test('assistant evidence shares a lens import and an import failure does not dis
   app.choose('release-freshness'); await flush()
   assert.equal(app.panel('release-freshness').querySelector('.analysis-body').textContent, 'Release Freshness:root')
 })
+
+test('explicit Refresh is passed to the active lens while the initial load reuses metadata', async t => {
+  const refreshes = []
+  const app = fixture(t, { 'go-requirements': () => Promise.resolve(lens('Go requirements', {
+    load: async (graph, options) => { refreshes.push(options.refresh); return { root: graph.rootId } },
+  })) }, 'go-requirements')
+  await app.views.capture(graph()); await flush()
+  app.panel('go-requirements').querySelector('.analysis-refresh').dispatchEvent(new Event('click')); await flush()
+  assert.deepEqual(refreshes, [false, true])
+})

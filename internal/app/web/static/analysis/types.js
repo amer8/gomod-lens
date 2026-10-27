@@ -7,6 +7,8 @@
  * @property {string} name
  * @property {string} [version]
  * @property {boolean} [replaced]
+ * @property {number} [descendantCount] Computed once by Go/WASM; zero includes leaves.
+ * @property {Object} [goRequirement] Exact-version Go minimum and source observation.
  * @property {string} [replacement] Resolved name@version, or a local path.
  * @property {Object<string, {status: string, score?: number, message?: string, details?: Object<string, string>}>} [lenses]
  */
@@ -22,6 +24,7 @@
  * @typedef {Object} LoadContext
  * @property {GraphNode} node Selected node captured when this request starts.
  * @property {AbortSignal} signal Aborted when the module graph changes.
+ * @property {boolean} [refresh] Bypass reusable metadata for an explicit Refresh.
  * @property {(done: number, total: number) => void} progress
  */
 

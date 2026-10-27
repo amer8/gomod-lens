@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/amer8/gomod-lens/internal/graph"
 	"github.com/amer8/gomod-lens/internal/modulesearch"
@@ -432,16 +433,19 @@ func (r *Resolver) loadGoMod(ctx context.Context, path, version string) (moduleM
 	}
 	r.mu.Unlock()
 
-	raw, err := r.fetchText(ctx, proxyModuleURL(path)+"/@v/"+proxyPathEscape(version)+".mod", "text/plain,*/*")
+	source := proxyModuleURL(path) + "/@v/" + proxyPathEscape(version) + ".mod"
+	raw, err := r.fetchText(ctx, source, "text/plain,*/*")
 	if err != nil {
 		return moduleMeta{}, err
 	}
-	meta := parseGoMod(raw)
+	meta, err := parseGoMod(raw)
+	if err != nil {
+		return moduleMeta{}, err
+	}
 	meta.RequestedPath = path
 	meta.RequestedVersion = version
-	if meta.ModulePath == "" {
-		meta.ModulePath = path
-	}
+	meta.Source = source
+	meta.ObservedAt = time.Now().UTC().Format(time.RFC3339Nano)
 
 	r.mu.Lock()
 	r.modFileCache[key] = meta
@@ -514,7 +518,7 @@ func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarg
 		if entry.Path != root.Path {
 			rule = replacementFor(entry.Path, entry.Version, rootReplacements)
 		}
-		nodes = append(nodes, graph.Node{
+		node := graph.Node{
 			ID:          entry.ID,
 			Name:        entry.Path,
 			Version:     entry.Version,
@@ -525,7 +529,15 @@ func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarg
 			Replacement: replacementTargetID(rule),
 			InDegree:    degrees.in[entry.ID],
 			OutDegree:   degrees.out[entry.ID],
-		})
+		}
+		if meta, ok := resolution.loaded[entry.ID]; ok && meta.Source != "" {
+			identity, public := goRequirementIdentity(node)
+			if public {
+				requirement := requirementObservation(meta, identity)
+				node.GoRequirement = &requirement
+			}
+		}
+		nodes = append(nodes, node)
 	}
 
 	names := make([]graph.PackageName, 0, len(nodes))

@@ -30,3 +30,10 @@ test('dependency counts deduplicate cycles and stop at roots and missing nodes',
   assert.deepEqual([...dependencyCounts(graph)], [['root', 3], ['a', 1], ['b', 1], ['leaf', 0], ['isolated', 0]])
   assert.deepEqual([...dependencyCounts({})], [])
 })
+
+test('WASM descendant counts are reused without traversing edges, including zero', () => {
+  const nodes = [{ id: 'root', root: true, descendantCount: 2 }, { id: 'a', descendantCount: 1 }, { id: 'leaf', descendantCount: 0 }]
+  assert.deepEqual([...dependencyCounts({ nodes, get edges() { throw new Error('Unexpected traversal') } })], [['root', 2], ['a', 1], ['leaf', 0]])
+  const mixed = { nodes: [{ id: 'a', descendantCount: 1 }, { id: 'b' }], edges: [{ source: 'a', target: 'b' }] }
+  assert.deepEqual([...dependencyCounts(mixed)], [['a', 1], ['b', 0]])
+})

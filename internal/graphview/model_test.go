@@ -7,6 +7,32 @@ import (
 	"github.com/amer8/gomod-lens/internal/graph"
 )
 
+func TestResponseSharesDescendantCountsWithSidebar(t *testing.T) {
+	g := graph.Graph{Nodes: []graph.Node{{ID: "root", Name: "example.org/root", Root: true}, {ID: "a", Name: "example.org/a"}, {ID: "leaf", Name: "example.org/leaf"}}, Edges: []graph.Edge{{Source: "root", Target: "a"}, {Source: "a", Target: "leaf"}}, PackageInfo: graph.PackageInfo{Names: []graph.PackageName{{Name: "example.org/root", Root: true, Count: 1}, {Name: "example.org/a", Count: 1}, {Name: "example.org/leaf", Count: 1}}}}
+	result := NewResponse(g)
+	if result.Nodes[1].DescendantCount == nil || *result.Nodes[1].DescendantCount != 1 || result.ViewModel.NameEntries[0].DependencyCount != *result.Nodes[1].DescendantCount {
+		t.Fatalf("unshared counts: %+v", result)
+	}
+	if g.Nodes[1].DescendantCount != nil {
+		t.Fatal("input mutated")
+	}
+	raw, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded struct {
+		Nodes []struct {
+			DescendantCount *int `json:"descendantCount"`
+		}
+	}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Nodes[2].DescendantCount == nil || *decoded.Nodes[2].DescendantCount != 0 {
+		t.Fatal("leaf zero count was omitted")
+	}
+}
+
 func TestOpenSSFGroupsUsesFiveScoreBuckets(t *testing.T) {
 	t.Parallel()
 

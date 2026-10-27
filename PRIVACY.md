@@ -31,12 +31,15 @@ endpoints for modules in the graph. The version selector also requests the
 root module's version list and latest version directly from the browser.
 Successful version-selector lookups are kept in page memory for five minutes.
 
-Opening the Go requirements lens sends public resolved module
-paths and exact versions to `proxy.golang.org` to read `.mod` files directly
-from the visitor's browser. Public replacements use their resolved identities;
-local replacements and missing versions are not sent. Requests omit credentials
-and use a five-minute page-memory cache cleared by Refresh. The chosen target
-toolchain is compared locally and is not sent to that service.
+Opening the Go requirements lens reuses exact-version metadata already parsed
+during graph resolution. Missing observations send public resolved module paths
+and exact versions to `proxy.golang.org` through Go/WASM to read `.mod` files.
+Public replacements use their resolved identities; local replacements and
+missing versions are not sent. Requests omit credentials. Supplemental metadata
+is kept in page memory for the current graph and can reuse the IndexedDB cache.
+Refresh requests every public version again, bypassing those cached observations
+and IndexedDB responses. The chosen target toolchain is compared locally and is
+not sent to that service.
 
 See the Go modules services privacy policy:
 <https://proxy.golang.org/privacy>
@@ -140,8 +143,9 @@ The browser keeps an IndexedDB cache of public upstream responses, with
 shorter TTLs for mutable lookups such as `@latest`, module lists, GitHub
 suggestions and deps.dev metadata, and longer TTLs for immutable module
 artifacts. Lens evidence uses a separate five-minute page-memory cache;
-Refresh clears that evidence cache. Browser site-data controls clear persisted
-responses.
+Refresh clears that evidence cache. Go requirements keeps parsed observations
+per graph; its Refresh bypasses both those observations and IndexedDB responses.
+Browser site-data controls clear persisted responses.
 
 Request concurrency is bounded by the browser resolver and evidence loaders.
 There are no application-server caches or per-client/global server rate limits.

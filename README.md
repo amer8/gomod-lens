@@ -26,10 +26,12 @@ them with a chosen target toolchain. Older minimums are compatibility baselines,
 not maintenance or security scores. See the
 [Go requirements guide](docs/features/go-requirements.md).
 
-Go graph enrichment supplies Scorecard summaries and release freshness in the
-graph payload. The browser adds Scorecard check details, vulnerability matches,
-license evidence and Go requirements when those views are opened. These browser
-observations stay in browser memory rather than the initial graph payload.
+Go graph enrichment supplies Scorecard summaries, release freshness, descendant
+counts and already-parsed Go minimums in the graph payload. The sidebar and
+renderer share those counts. The browser adds Scorecard check details,
+vulnerability matches and license evidence when those views are opened.
+Go requirements reuses known minimums and asks WASM to fetch and parse only
+missing exact versions. Supplemental observations stay in browser memory.
 
 The **Graph assistant** adds a collapsible chat dock with three contextual
 starter questions and three follow-ups after each answer. It connects answers
