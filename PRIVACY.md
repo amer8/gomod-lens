@@ -145,7 +145,11 @@ suggestions and deps.dev metadata, and longer TTLs for immutable module
 artifacts. Lens evidence uses a separate five-minute page-memory cache;
 Refresh clears that evidence cache. Go requirements keeps parsed observations
 per graph; its Refresh bypasses both those observations and IndexedDB responses.
-Browser site-data controls clear persisted responses.
+The app removes expired IndexedDB entries on cache opening and periodically
+after writes. It also aims to retain at most 2,000 responses, evicting those
+with the earliest expiration first; the count can temporarily exceed that limit
+between cleanup runs. If storage is full, it evicts a batch and retries a cache
+write once. Browser site-data controls clear persisted responses.
 
 Request concurrency is bounded by the browser resolver and evidence loaders.
 There are no application-server caches or per-client/global server rate limits.
