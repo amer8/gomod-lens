@@ -4,6 +4,9 @@ import { loadGoRequirements } from '../wasm-client.js'
 // Supplemental metadata belongs to its graph snapshot, without mutating nodes.
 const snapshots = new WeakMap()
 
+// Shared by legend swatches, labels and the Canvas/WebGPU rendering buffers.
+const releaseGroupColors = ['#74b7e7', '#ea8aa6', '#a0eea0', '#9674e7', '#eac28a']
+
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*)|(beta|rc)(0|[1-9]\d*))?$/
 
 function versionParts(value) {
@@ -101,7 +104,7 @@ export function requirementSummary(graph, data, target) {
     groups.push({ id: 'earlier', label: 'Go ' + families[4] + ' and earlier', items: items.filter(item => earlier.has(item.family)) })
   }
   // Keep the overview and graph to a handful of matching categorical colors.
-  groups.forEach((group, index) => { group.color = `hsl(${((205 + index * 137.508) % 360).toFixed(1)}, 70%, ${68 + index % 3 * 5}%)` })
+  groups.forEach((group, index) => { group.color = releaseGroupColors[index] })
   const unknown = items.filter(item => !item.family)
   if (unknown.length) groups.push({ id: 'unknown', label: 'Unknown', items: unknown, color: '#8b95a7' })
   return {

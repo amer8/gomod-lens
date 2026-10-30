@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import lens from '../internal/app/web/static/analysis/go-requirements.js'
 import { classifyRequirement, compareGoVersions, defaultTarget, goModURL, lookupGoRequirements, requirementColors, requirementPath, requirementSummary, requirementVersionColors, targetGoVersion } from '../internal/app/web/static/analysis/go-requirements-data.js'
+import { createGraphModel } from '../internal/app/web/static/graph-model.js'
 
 const root = Object.freeze({ id: 'root', name: 'example.org/root', version: 'v1.0.0' })
 const dependency = Object.freeze({ id: 'dep', name: 'example.org/dependency', version: 'v2.0.0' })
@@ -150,6 +151,31 @@ test('release groups share legend colors across exact versions, target, selectio
   assert.deepEqual(requirementColors(value, observations, '1', { target: '1.27.3' }), colors)
   assert.deepEqual(requirementColors({ nodes: [...nodes].reverse() }, observations), colors)
   assert.deepEqual(requirementColors(graph, { error: 'offline' }), { root: '#8b95a7', dep: '#8b95a7', unknown: '#8b95a7' })
+})
+
+test('Go requirement legend colors reach node and edge rendering buffers', () => {
+  const minimums = ['1.27.0', '1.26', '1.26.3', '1.25.0', '1.24', '1.23', '1.22', undefined]
+  const nodes = minimums.map((_, index) => ({ id: String(index), root: index === 0 }))
+  const snapshot = { rootId: '0', nodes, edges: nodes.slice(1).map(node => ({ source: '0', target: node.id })) }
+  const observations = { records: new Map(minimums.map((minimum, index) => [String(index), minimum ? { status: 'observed', minimum } : { status: 'unknown' }])) }
+  const summary = requirementSummary(snapshot, observations, '')
+  const model = createGraphModel(snapshot)
+  model.setColors(requirementColors(snapshot, observations))
+
+  for (const group of summary.groups) {
+    assert.match(group.color, /^#[\da-f]{6}$/i, 'legend colors must use the renderer color format')
+    const expected = [1, 3, 5].map(offset => parseInt(group.color.slice(offset, offset + 2), 16) / 255)
+    for (const { node } of group.items) {
+      const rendered = model.byID.get(node.id)
+      assert.equal(rendered.color, group.color)
+      expected.forEach((channel, index) => assert(Math.abs(model.nodeData[rendered.index * 8 + 4 + index] - channel) < 1e-6))
+      assert.equal(model.nodeData[rendered.index * 8 + 7], 1)
+      for (const edge of model.links.filter(edge => edge.toId === node.id)) {
+        expected.forEach((channel, index) => assert(Math.abs(model.edgeData[edge.index * 12 + 8 + index] - channel) < 1e-6))
+        assert.equal(model.edgeData[edge.index * 12 + 11], 0.5)
+      }
+    }
+  }
 })
 
 test('overview keeps four release families, combines earlier minimums and preserves exact comparisons', () => {
