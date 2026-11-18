@@ -1,28 +1,74 @@
 const stages = [
-  { value: 0, labels: ['Resolving module', 'Loading root module'], status: 'Reading module requirements', detail: 'Loading the selected module and its go.mod file.' },
-  { value: 18, labels: ['Resolving dependencies'], status: 'Resolving dependencies', detail: 'Following module requirements and selecting dependency versions.' },
-  { value: 78, labels: ['Building graph'], status: 'Building the dependency graph', detail: 'Connecting the resolved modules into a dependency graph.' },
-  { value: 82, labels: ['Applying OpenSSF lens'], status: 'Checking security practices', detail: 'Loading OpenSSF Scorecard evidence for the graph.' },
-  { value: 98, labels: ['Applying Release Freshness lens'], status: 'Checking release freshness', detail: 'Fetching published versions for the dependency graph.' },
+  {
+    value: 0,
+    labels: ['Resolving module', 'Loading root module'],
+    status: 'Reading module requirements',
+    detail: 'Loading the selected module and its go.mod file.',
+  },
+  {
+    value: 18,
+    labels: ['Resolving dependencies'],
+    status: 'Resolving dependencies',
+    detail: 'Following module requirements and selecting dependency versions.',
+  },
+  {
+    value: 78,
+    labels: ['Building graph'],
+    status: 'Building the dependency graph',
+    detail: 'Connecting the resolved modules into a dependency graph.',
+  },
+  {
+    value: 82,
+    labels: ['Applying OpenSSF lens'],
+    status: 'Checking security practices',
+    detail: 'Loading OpenSSF Scorecard evidence for the graph.',
+  },
+  {
+    value: 98,
+    labels: ['Applying Release Freshness lens'],
+    status: 'Checking release freshness',
+    detail: 'Fetching published versions for the dependency graph.',
+  },
 ]
 const minimumStageDuration = 500
 
+/** @param {HTMLElement} parent @param {string} selector */
+function requiredElement(parent, selector) {
+  const element = /** @type {HTMLElement | null} */ (parent.querySelector(selector))
+  if (!element) throw new Error(`Graph loading view is missing ${selector}`)
+  return element
+}
+
+/** @param {HTMLElement} container */
 export function createGraphLoadingView(container) {
-  const target = container.querySelector('#graph-loading-target')
-  const status = container.querySelector('#graph-loading-status')
-  const wait = container.querySelector('#graph-loading-wait')
-  const steps = [...container.querySelectorAll('[data-loading-step]')].map(element => ({
+  const target = requiredElement(container, '#graph-loading-target')
+  const status = requiredElement(container, '#graph-loading-status')
+  const wait = requiredElement(container, '#graph-loading-wait')
+  const stepElements = /** @type {NodeListOf<HTMLElement>} */ (
+    container.querySelectorAll('[data-loading-step]')
+  )
+  const steps = [...stepElements].map((element) => ({
     element,
-    marker: element.querySelector('.graph-loading-marker'),
-    detail: element.querySelector('.graph-loading-detail'),
-    status: element.querySelector('.graph-loading-step-status'),
+    marker: requiredElement(element, '.graph-loading-marker'),
+    detail: requiredElement(element, '.graph-loading-detail'),
+    status: requiredElement(element, '.graph-loading-step-status'),
   }))
-  let active = false, stage = -1, reportedStage = -1, stageStartedAt = 0
-  let waitTimer = null, stageTimer = null, completion = null, resolveCompletion = null
+  let active = false,
+    stage = -1,
+    reportedStage = -1,
+    stageStartedAt = 0
+  /** @type {number | undefined} */
+  let waitTimer
+  /** @type {number | null} */
+  let stageTimer = null
+  /** @type {Promise<void> | null} */
+  let completion = null
+  /** @type {(() => void) | null} */
+  let resolveCompletion = null
 
   function clearTimers() {
     window.clearTimeout(waitTimer)
-    window.clearTimeout(stageTimer)
+    window.clearTimeout(stageTimer ?? undefined)
     stageTimer = null
   }
 
@@ -34,7 +80,9 @@ export function createGraphLoadingView(container) {
   function restartWaitTimer() {
     window.clearTimeout(waitTimer)
     wait.hidden = true
-    waitTimer = window.setTimeout(() => { if (active) wait.hidden = false }, 15000)
+    waitTimer = window.setTimeout(() => {
+      if (active) wait.hidden = false
+    }, 15000)
   }
 
   function render() {
@@ -52,9 +100,13 @@ export function createGraphLoadingView(container) {
 
   function advance() {
     if (!active || stage >= reportedStage || stageTimer !== null) return
-    const remaining = stage < 0 ? 0 : minimumStageDuration - (window.performance.now() - stageStartedAt)
+    const remaining =
+      stage < 0 ? 0 : minimumStageDuration - (window.performance.now() - stageStartedAt)
     if (remaining > 0) {
-      stageTimer = window.setTimeout(() => { stageTimer = null; advance() }, remaining)
+      stageTimer = window.setTimeout(() => {
+        stageTimer = null
+        advance()
+      }, remaining)
       return
     }
     stage++
@@ -73,6 +125,7 @@ export function createGraphLoadingView(container) {
   }
 
   return {
+    /** @param {string} moduleTarget */
     show(moduleTarget) {
       clearTimers()
       complete()
@@ -86,11 +139,16 @@ export function createGraphLoadingView(container) {
       restartWaitTimer()
       container.hidden = false
     },
+    /** @param {{value?: number, label?: string}} [progress] */
     update({ value, label } = {}) {
       if (!active) return
-      const done = (Number.isFinite(value) && value >= 100) || label === 'Done'
-      let next = done ? stages.length : stages.findIndex(entry => entry.labels.includes(label))
-      if (next < 0 && Number.isFinite(value)) next = stages.findLastIndex(entry => value >= entry.value)
+      const done =
+        (typeof value === 'number' && Number.isFinite(value) && value >= 100) || label === 'Done'
+      let next = done
+        ? stages.length
+        : stages.findIndex((entry) => entry.labels.includes(label || ''))
+      if (next < 0 && typeof value === 'number' && Number.isFinite(value))
+        next = stages.findLastIndex((entry) => value >= entry.value)
       if (next < reportedStage) return
       reportedStage = next
       if (next < 0) status.textContent = label || 'Preparing analyzer…'
@@ -98,7 +156,9 @@ export function createGraphLoadingView(container) {
     },
     finish() {
       if (!active || stage === stages.length) return Promise.resolve()
-      completion ||= new Promise(resolve => { resolveCompletion = resolve })
+      completion ||= new Promise((resolve) => {
+        resolveCompletion = resolve
+      })
       reportedStage = stages.length
       advance()
       return completion

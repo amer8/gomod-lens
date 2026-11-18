@@ -29,6 +29,9 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Install JavaScript development dependencies
+        run: npm ci
+
       - name: Download modules
         run: go mod download
 
@@ -59,6 +62,9 @@ jobs:
 
       - name: Test browser logic
         run: make test-js
+
+      - name: Type-check browser modules
+        run: make typecheck
 
       - name: Test WASM promise lifecycle
         run: make test-wasm

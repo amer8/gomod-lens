@@ -6,8 +6,9 @@ Thanks for taking the time to improve go.mod Lens.
 
 Development requires Go 1.26 or newer. Use Node.js 24 LTS for the test suite.
 The application runs in the browser: Go/WASM resolves public module graphs,
-and JavaScript renders the graph, sidebar and lenses. No npm install or
-JavaScript build step is required.
+and JavaScript renders the graph, sidebar and lenses. Running the application
+does not require npm or a JavaScript build step. To run all development checks,
+install the pinned JavaScript development dependencies with `npm ci`.
 
 Run the static application locally:
 
@@ -25,6 +26,7 @@ Run focused tests with repo-local Go cache directories:
 make test
 make test-js
 make test-wasm
+make typecheck
 ```
 
 ## Static Build
@@ -68,6 +70,11 @@ make check
 
 This includes Go formatting/module checks, WASM compilation, vet, Go tests,
 the Node.js browser tests and Go WASM lifecycle tests running in Node.js.
+It also uses TypeScript to check first-party browser JavaScript, the lens
+scaffolder, and the graph benchmark fixture; the checker does not generate
+deployment assets. Use JSDoc for contracts in new modules.
+The browser/WASM declarations are in `internal/app/web/wasm-globals.d.ts` and
+should match the Go exports. Vendored JavaScript is excluded from checking.
 `make test-js` and `make test-wasm` provide focused runs; still run `make check`
 before opening a pull request. Module-resolution regressions use offline proxy
 fixtures to compare the browser resolver's selected versions with `go list`.

@@ -1,36 +1,85 @@
 import { renderSidebar } from './sidebar-view.js'
 import { createGraphLoadingView } from './graph-loading.js'
 
-export function createApplication({ client, graphView, createAnalysisViews, createModuleVersionPicker }) {
-  const { applyHighlightRequest, setAnalysisColors, clearGraph, renderGraph, selectNode, setGraphLens } = graphView
+/** @typedef {import('./analysis/types.js').GraphPayload} GraphPayload */
+/** @typedef {import('../wasm-globals').SearchResult} SearchResult */
+/** @typedef {{loading: () => void, select: (node: import('./analysis/types.js').GraphNode | null) => void, capture: (payload: GraphPayload) => void | Promise<void>}} AnalysisViews */
+/** @typedef {typeof import('./graph.js')} GraphView */
+/**
+ * @typedef {Object} AnalysisControls
+ * @property {GraphView['selectNode']} selectNode
+ * @property {GraphView['setGraphLens']} setGraphLens
+ * @property {GraphView['setAnalysisColors']} setColors
+ * @property {GraphView['applyHighlightRequest']} highlight
+ */
+/**
+ * @typedef {Object} ApplicationDependencies
+ * @property {typeof import('./wasm-client.js')} client
+ * @property {GraphView} graphView
+ * @property {(options: AnalysisControls) => AnalysisViews} createAnalysisViews
+ * @property {typeof import('./module-versions.js').createModuleVersionPicker} createModuleVersionPicker
+ */
+
+/** @param {string} id */
+function requiredElement(id) {
+  const element = document.getElementById(id)
+  if (!element) throw new Error(`Application is missing #${id}`)
+  return element
+}
+
+/** @param {ApplicationDependencies} dependencies */
+export function createApplication({
+  client,
+  graphView,
+  createAnalysisViews,
+  createModuleVersionPicker,
+}) {
+  const {
+    applyHighlightRequest,
+    setAnalysisColors,
+    clearGraph,
+    renderGraph,
+    selectNode,
+    setGraphLens,
+  } = graphView
   const moduleSuggestionDelay = 220
   const maxModuleSuggestions = 6
 
   const elements = {
-    form: document.getElementById('search-form'),
-    input: document.getElementById('module-target'),
-    button: document.getElementById('analyze-button'),
-    progress: document.getElementById('graph-progress'),
-    cancelLoading: document.getElementById('cancel-graph-loading'),
-    errors: document.getElementById('graph-errors'),
-    errorMessage: document.getElementById('error-message'),
+    form: /** @type {HTMLFormElement} */ (requiredElement('search-form')),
+    input: /** @type {HTMLInputElement} */ (requiredElement('module-target')),
+    button: /** @type {HTMLButtonElement} */ (requiredElement('analyze-button')),
+    progress: requiredElement('graph-progress'),
+    cancelLoading: requiredElement('cancel-graph-loading'),
+    errors: requiredElement('graph-errors'),
+    errorMessage: requiredElement('error-message'),
     graphCanvas: document.getElementById('graph-canvas'),
     graphResult: document.getElementById('graph-result'),
     leftPanel: document.getElementById('left-panel'),
     navbar: document.getElementById('navbar-component'),
-    suggestions: null,
+    suggestions: /** @type {HTMLElement | null} */ (null),
   }
 
+  /** @type {number | null} */
   let moduleSuggestionTimer = null
+  /** @type {AbortController | null} */
   let moduleSuggestionController = null
+  /** @type {SearchResult[]} */
   let moduleSuggestions = []
   let activeModuleSuggestion = -1
 
   const versionPicker = createModuleVersionPicker(elements.form, elements.input)
-  const analysisViews = createAnalysisViews({selectNode, setGraphLens, setColors:setAnalysisColors, highlight:applyHighlightRequest})
+  const analysisViews = createAnalysisViews({
+    selectNode,
+    setGraphLens,
+    setColors: setAnalysisColors,
+    highlight: applyHighlightRequest,
+  })
   const loadingView = createGraphLoadingView(elements.progress)
 
+  /** @type {AbortController | null} */
   let graphController = null
+  /** @type {string | null} */
   let routedTarget = null
 
   elements.cancelLoading.addEventListener('click', () => {
@@ -64,7 +113,9 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
 
     if (event.key === 'ArrowUp') {
       event.preventDefault()
-      setActiveModuleSuggestion((activeModuleSuggestion - 1 + moduleSuggestions.length) % moduleSuggestions.length)
+      setActiveModuleSuggestion(
+        (activeModuleSuggestion - 1 + moduleSuggestions.length) % moduleSuggestions.length,
+      )
       return
     }
 
@@ -80,18 +131,23 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
   })
 
   document.addEventListener('click', (event) => {
-    const suggestion = event.target.closest('[data-module-suggestion]')
+    const target = /** @type {HTMLElement | null} */ (event.target)
+    const suggestion = /** @type {HTMLElement | null} */ (
+      target?.closest?.('[data-module-suggestion]') || null
+    )
     if (suggestion) {
       event.preventDefault()
       chooseModuleSuggestion(Number(suggestion.dataset.moduleSuggestion))
       return
     }
 
-    if (!event.target.closest('#search-form')) {
+    if (!target?.closest?.('#search-form')) {
       hideModuleSuggestions()
     }
 
-    const highlightLink = event.target.closest('[data-highlight-ids]')
+    const highlightLink = /** @type {HTMLElement | null} */ (
+      target?.closest?.('[data-highlight-ids]') || null
+    )
     if (highlightLink) {
       event.preventDefault()
       applyHighlightRequest({
@@ -102,13 +158,14 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
       return
     }
 
-    const moduleLink = event.target.closest('[data-module-target]')
+    const moduleLink = /** @type {HTMLElement | null} */ (
+      target?.closest?.('[data-module-target]') || null
+    )
     if (moduleLink) {
       event.preventDefault()
       previewModule(moduleLink.dataset.moduleTarget || '')
       return
     }
-
   })
 
   window.addEventListener('hashchange', syncFromHash)
@@ -173,12 +230,14 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     window.location.hash = next
   }
 
+  /** @param {string} target */
   function previewModule(target) {
     elements.input.value = target
     hideModuleSuggestions()
     submitRequest()
   }
 
+  /** @param {string} target */
   function syncResolvedTarget(target) {
     target = normalizeModuleTarget(target)
     if (!target) return
@@ -192,37 +251,57 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     }
   }
 
+  /** @param {string} target */
   async function loadGraph(target) {
     graphController?.abort()
-    const own = graphController = new AbortController()
-    versionPicker.loading(); analysisViews.loading(); hideModuleSuggestions()
-    setGraphResult(emptyGraphResult()); clearGraph(elements.graphCanvas)
-    setGraphLoaded(false); setLoading(true, target); setError('')
+    const own = (graphController = new AbortController())
+    versionPicker.loading()
+    analysisViews.loading()
+    hideModuleSuggestions()
+    setGraphResult(emptyGraphResult())
+    clearGraph(elements.graphCanvas)
+    setGraphLoaded(false)
+    setLoading(true, target)
+    setError('')
     try {
       const payload = await client.loadGraph(target, {
         signal: own.signal,
-        onProgress(progress) { if (graphController === own && !own.signal.aborted) loadingView.update(progress) },
+        onProgress(progress) {
+          if (graphController === own && !own.signal.aborted) loadingView.update(progress)
+        },
       })
       if (graphController !== own || own.signal.aborted) return
-      if (!hasCompleteBuiltInLensData(payload)) throw new Error('Built-in lens data was not included in the graph response')
+      if (!hasCompleteBuiltInLensData(payload))
+        throw new Error('Built-in lens data was not included in the graph response')
       await loadingView.finish()
       if (graphController !== own || own.signal.aborted) return
       syncResolvedTarget(payload?.meta?.target || target)
       setGraphResult(renderSidebar(payload))
-      await renderGraph(elements.graphCanvas, payload, { onNodeSelected(node) {
-        selectNode(node?.id || ''); analysisViews.select(node)
-      } })
+      await renderGraph(elements.graphCanvas, payload, {
+        onNodeSelected(node) {
+          selectNode(node?.id || '')
+          analysisViews.select(node)
+        },
+      })
       if (graphController !== own || own.signal.aborted) return
-      setLoading(false); setError(''); setGraphLoaded(true)
-      void versionPicker.capture(payload); void analysisViews.capture(payload)
+      setLoading(false)
+      setError('')
+      setGraphLoaded(true)
+      void versionPicker.capture(payload)
+      void analysisViews.capture(payload)
     } catch (error) {
       if (graphController !== own || own.signal.aborted) return
-      versionPicker.clear(); setLoading(false); setError(error?.message || 'Unable to load graph')
-      setGraphResult(errorGraphResult(error?.message || 'Unable to load graph'))
-      clearGraph(elements.graphCanvas); setGraphLoaded(false)
+      const message = (error instanceof Error && error.message) || 'Unable to load graph'
+      versionPicker.clear()
+      setLoading(false)
+      setError(message)
+      setGraphResult(errorGraphResult(message))
+      clearGraph(elements.graphCanvas)
+      setGraphLoaded(false)
     }
   }
 
+  /** @param {HTMLElement} result */
   function setGraphResult(result) {
     elements.graphResult?.replaceWith(result)
     elements.graphResult = result
@@ -230,16 +309,20 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
 
   function emptyGraphResult() {
     const result = document.createElement('div')
-    result.id = 'graph-result'; result.dataset.state = 'empty'
+    result.id = 'graph-result'
+    result.dataset.state = 'empty'
     return result
   }
 
+  /** @param {string} message */
   function errorGraphResult(message) {
     const result = emptyGraphResult()
-    result.dataset.state = 'error'; result.dataset.error = message
+    result.dataset.state = 'error'
+    result.dataset.error = message
     return result
   }
 
+  /** @param {GraphPayload} payload */
   function hasCompleteBuiltInLensData(payload) {
     if (!Array.isArray(payload?.nodes)) return false
 
@@ -251,21 +334,24 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     return true
   }
 
+  /** @param {boolean} value */
   function setGraphLoaded(value) {
     elements.leftPanel?.classList.toggle('left-panel-empty', !value)
     elements.navbar?.classList.toggle('navbar-component-empty', !value)
   }
 
+  /** @param {boolean} value @param {string} [target] */
   function setLoading(value, target) {
     elements.button.disabled = value
     elements.input.disabled = value
     elements.form.hidden = value
     elements.leftPanel?.classList.toggle('is-loading', value)
     elements.graphCanvas?.setAttribute('aria-busy', String(value))
-    if (value) loadingView.show(target)
+    if (value) loadingView.show(target || '')
     else loadingView.hide()
   }
 
+  /** @param {string} message */
   function setError(message) {
     elements.errors.hidden = !message
     elements.errorMessage.textContent = message
@@ -303,16 +389,26 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     }, moduleSuggestionDelay)
   }
 
+  /** @param {string} query */
   function fetchModuleSuggestions(query) {
-    const own = moduleSuggestionController = new AbortController()
-    client.searchModules(query, maxModuleSuggestions, own.signal).then(results => {
-      if (moduleSuggestionController !== own || own.signal.aborted || normalizeModuleSearchQuery(elements.input?.value || '') !== query) return
-      renderModuleSuggestions(Array.isArray(results) ? results : [])
-    }).catch(error => {
-      if (moduleSuggestionController === own && !own.signal.aborted) renderModuleSuggestions([])
-    })
+    const own = (moduleSuggestionController = new AbortController())
+    client
+      .searchModules(query, maxModuleSuggestions, own.signal)
+      .then((results) => {
+        if (
+          moduleSuggestionController !== own ||
+          own.signal.aborted ||
+          normalizeModuleSearchQuery(elements.input?.value || '') !== query
+        )
+          return
+        renderModuleSuggestions(Array.isArray(results) ? results : [])
+      })
+      .catch((error) => {
+        if (moduleSuggestionController === own && !own.signal.aborted) renderModuleSuggestions([])
+      })
   }
 
+  /** @param {SearchResult[]} results */
   function renderModuleSuggestions(results) {
     moduleSuggestions = results.filter((result) => result?.path)
     activeModuleSuggestion = -1
@@ -321,28 +417,31 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
       return
     }
 
-    elements.suggestions.replaceChildren(...moduleSuggestions.map((result, index) => {
-      const button = document.createElement('button')
-      button.type = 'button'
-      button.className = 'module-suggestion'
-      button.dataset.moduleSuggestion = String(index)
-      button.setAttribute('role', 'option')
+    elements.suggestions.replaceChildren(
+      ...moduleSuggestions.map((result, index) => {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.className = 'module-suggestion'
+        button.dataset.moduleSuggestion = String(index)
+        button.setAttribute('role', 'option')
 
-      const main = document.createElement('span')
-      main.className = 'module-suggestion-main'
-      main.textContent = result.path
-      button.append(main)
+        const main = document.createElement('span')
+        main.className = 'module-suggestion-main'
+        main.textContent = result.path
+        button.append(main)
 
-      const meta = document.createElement('span')
-      meta.className = 'module-suggestion-meta'
-      meta.textContent = moduleSuggestionMeta(result)
-      button.append(meta)
+        const meta = document.createElement('span')
+        meta.className = 'module-suggestion-meta'
+        meta.textContent = moduleSuggestionMeta(result)
+        button.append(meta)
 
-      return button
-    }))
+        return button
+      }),
+    )
     elements.suggestions.hidden = false
   }
 
+  /** @param {SearchResult} result */
   function moduleSuggestionMeta(result) {
     const bits = []
     if (result.description) {
@@ -354,14 +453,18 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     return bits.join('  ')
   }
 
+  /** @param {number} index */
   function setActiveModuleSuggestion(index) {
     activeModuleSuggestion = index
-    elements.suggestions?.querySelectorAll('[data-module-suggestion]').forEach((item, itemIndex) => {
-      item.classList.toggle('module-suggestion-active', itemIndex === index)
-      item.setAttribute('aria-selected', itemIndex === index ? 'true' : 'false')
-    })
+    elements.suggestions
+      ?.querySelectorAll('[data-module-suggestion]')
+      .forEach((item, itemIndex) => {
+        item.classList.toggle('module-suggestion-active', itemIndex === index)
+        item.setAttribute('aria-selected', itemIndex === index ? 'true' : 'false')
+      })
   }
 
+  /** @param {number} index */
   function chooseModuleSuggestion(index) {
     const suggestion = moduleSuggestions[index]
     if (!suggestion?.path) return
@@ -388,6 +491,7 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     moduleSuggestionTimer = null
   }
 
+  /** @param {string} target */
   function normalizeModuleTarget(target) {
     const normalized = target.trim()
     if (!normalized || isLikelyLocalTarget(normalized)) {
@@ -396,16 +500,19 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     return normalized
   }
 
+  /** @param {string} target */
   function normalizeModuleSearchQuery(target) {
     return (target || '').trim().split('@')[0].trim()
   }
 
+  /** @param {string} query */
   function shouldSearchModuleQuery(query) {
     if (!query || isLikelyLocalTarget(query)) return false
     const firstSegment = query.split('/')[0] || ''
     return !firstSegment.includes('.')
   }
 
+  /** @param {string} target */
   function isLikelyLocalTarget(target) {
     if (!target) return false
     return (
@@ -418,6 +525,7 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     )
   }
 
+  /** @param {number} value */
   function formatCount(value) {
     if (value >= 1000) {
       return `${Math.round(value / 1000)}k`
@@ -425,14 +533,16 @@ export function createApplication({ client, graphView, createAnalysisViews, crea
     return String(value)
   }
 
+  /** @param {string | undefined} raw @returns {string[]} */
   function parseIDs(raw) {
     if (!raw) return []
     try {
-      const parsed = JSON.parse(raw)
-      return Array.isArray(parsed) ? parsed : []
+      const parsed = /** @type {unknown} */ (JSON.parse(raw))
+      return Array.isArray(parsed)
+        ? /** @type {unknown[]} */ (parsed).filter((value) => typeof value === 'string')
+        : []
     } catch {
       return []
     }
   }
-
 }

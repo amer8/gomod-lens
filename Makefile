@@ -10,7 +10,7 @@ GO_ENV := GOCACHE=$(GOCACHE) GOMODCACHE=$(GOMODCACHE)
 GO_PACKAGES := ./...
 GO_SOURCE_DIRS := internal cmd
 
-.PHONY: help cache-dirs run test test-js test-wasm vet vet-wasm fmt fmt-check tidy-check wasm serve check clean new-lens
+.PHONY: help cache-dirs run test test-js test-wasm typecheck vet vet-wasm fmt fmt-check tidy-check wasm serve check clean new-lens
 
 help: ## Show available targets.
 	@awk 'BEGIN {FS = ":.*##"; printf "Usage: make <target>\n\nTargets:\n"} /^[a-zA-Z0-9_-]+:.*##/ {printf "  %-12s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -25,6 +25,9 @@ test: cache-dirs ## Run all Go tests with repo-local caches.
 
 test-js: ## Run browser logic and registry tests (Node.js 24 LTS).
 	$(NODE) --test tests/*.test.mjs
+
+typecheck: ## Type-check browser JavaScript (run npm ci first).
+	./node_modules/.bin/tsc --project tsconfig.json
 
 new-lens: ## Scaffold and register a browser lens: make new-lens NAME=module-overview.
 	$(NODE) tools/lenses.mjs new "$(NAME)"
@@ -54,7 +57,7 @@ wasm: cache-dirs ## Generate the complete static deployment in dist/.
 serve: wasm ## Build and serve the static deployment on PORT, default 4173.
 	$(GO_ENV) $(GO) run ./cmd/serve-dist -port $(PORT)
 
-check: fmt-check tidy-check wasm vet vet-wasm test test-js test-wasm ## Run the same checks used by CI.
+check: fmt-check tidy-check wasm vet vet-wasm test test-js test-wasm typecheck ## Run the same checks used by CI.
 
 clean: ## Remove generated local caches and static artifacts.
 	rm -rf "$(CURDIR)/.gocache" "$(CURDIR)/.gomodcache" dist

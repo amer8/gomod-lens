@@ -105,7 +105,8 @@ make serve
 
 Open [localhost:4173](http://localhost:4173). The Go server serves the static
 application; Go/WASM performs analysis in your browser. Public upstream services
-are still required. Use Node.js 24 LTS to run `make check`.
+are still required. To run `make check`, use Node.js 24 LTS and first run
+`npm ci` to install the development-only JavaScript type checker.
 
 For changes to the application, see [Contributing](CONTRIBUTING.md) and the
 [lens developer guide](docs/development/lenses.md).

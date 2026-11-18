@@ -19,23 +19,27 @@ async function fixture(t) {
   return root
 }
 
-test('scaffolding produces a discoverable lens and runnable tests from canonical sources', async t => {
+test('scaffolding produces a discoverable lens and runnable tests from canonical sources', async (t) => {
   const root = await fixture(t)
   const { testPath } = await createLens(root, 'module-overview')
   const registry = await import(pathToFileURL(join(root, source, 'registry.js')))
-  const registration = registry.browserLenses.find(lens => lens.id === 'module-overview')
+  const registration = registry.browserLenses.find((lens) => lens.id === 'module-overview')
   assert.equal(registration.key, 'module-overview')
   const { default: lens } = await registration.importModule()
   assert.equal(typeof lens.render, 'function')
-  assert.deepEqual(await lens.load({ nodes: [], edges: [] }, { signal: new AbortController().signal }), { moduleCount: 0, relationshipCount: 0 })
+  assert.deepEqual(
+    await lens.load({ nodes: [], edges: [] }, { signal: new AbortController().signal }),
+    { moduleCount: 0, relationshipCount: 0 },
+  )
   const env = { ...process.env }
   delete env.NODE_TEST_CONTEXT
-  const { stdout } = await run(process.execPath, ['--test', '--test-reporter=tap', testPath], { env })
+  const { stdout } = await run(process.execPath, ['--test', '--test-reporter=tap', testPath], {
+    env,
+  })
   assert.match(stdout, /# pass 2/)
-
 })
 
-test('scaffolding rejects IDs, state keys and existing files without changing the registry', async t => {
+test('scaffolding rejects IDs, state keys and existing files without changing the registry', async (t) => {
   const root = await fixture(t)
   const registryPath = join(root, source, 'registry.js')
   const before = await readFile(registryPath, 'utf8')
@@ -51,14 +55,17 @@ test('scaffolding rejects IDs, state keys and existing files without changing th
   assert.deepEqual(await readdir(join(root, source)), files)
 })
 
-test('an existing contribution test is never overwritten or partially scaffolded', async t => {
+test('an existing contribution test is never overwritten or partially scaffolded', async (t) => {
   const root = await fixture(t)
   const { mkdir } = await import('node:fs/promises')
   await mkdir(join(root, 'tests'))
   await writeFile(join(root, 'tests/existing.test.mjs'), 'existing contribution\n')
   const before = await readFile(join(root, source, 'registry.js'), 'utf8')
   await assert.rejects(createLens(root, 'existing'), /Refusing to overwrite/)
-  assert.equal(await readFile(join(root, 'tests/existing.test.mjs'), 'utf8'), 'existing contribution\n')
+  assert.equal(
+    await readFile(join(root, 'tests/existing.test.mjs'), 'utf8'),
+    'existing contribution\n',
+  )
   assert.equal(await readFile(join(root, source, 'registry.js'), 'utf8'), before)
   assert.equal((await readdir(join(root, source))).includes('existing.js'), false)
 })

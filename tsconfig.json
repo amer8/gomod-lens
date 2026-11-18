@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "files": [
+    "internal/app/web/wasm-globals.d.ts",
+    "internal/app/web/webgpu.d.ts",
+    "tools/graph-benchmark/fixture.js",
+    "tools/lenses.mjs"
+  ],
+  "include": ["internal/app/web/static/**/*.js"],
+  "exclude": ["internal/app/web/static/vendor/**"]
+}

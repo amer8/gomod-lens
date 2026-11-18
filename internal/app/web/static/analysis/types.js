@@ -1,14 +1,28 @@
 // Editor documentation for the browser extension interface; no build step.
 // The serialized graph is defined in internal/graph/model.go.
 
+/** @typedef {{name: string, version: string}} ModuleIdentity */
+/** @typedef {{status: string, minimum?: string, implicit?: boolean, identity?: ModuleIdentity, source?: string, observedAt?: string, error?: string}} GoRequirement */
+
+/**
+ * @typedef {Object} GraphViewModel
+ * @property {import('../sidebar-view.js').GroupEntry[]} [relationGroups]
+ * @property {import('../sidebar-view.js').GroupEntry[]} [originGroups]
+ * @property {import('../sidebar-view.js').GroupEntry[]} [nameEntries]
+ * @property {Record<string, import('../sidebar-view.js').GroupEntry[]>} [lensGroups]
+ */
+
 /**
  * @typedef {Object} GraphNode
  * @property {string} id
  * @property {string} name
  * @property {string} [version]
+ * @property {boolean} [root]
+ * @property {boolean} [direct]
+ * @property {number} [outDegree]
  * @property {boolean} [replaced]
  * @property {number} [descendantCount] Computed once by Go/WASM; zero includes leaves.
- * @property {Object} [goRequirement] Exact-version Go minimum and source observation.
+ * @property {GoRequirement} [goRequirement] Exact-version Go minimum and source observation.
  * @property {string} [replacement] Resolved name@version, or a local path.
  * @property {Object<string, {status: string, score?: number, message?: string, details?: Object<string, string>}>} [lenses]
  */
@@ -18,6 +32,8 @@
  * @property {string} rootId
  * @property {GraphNode[]} nodes
  * @property {{source: string, target: string}[]} edges
+ * @property {{target: string, lenses?: {id: string}[]}} [meta]
+ * @property {GraphViewModel} [viewModel]
  */
 
 /**

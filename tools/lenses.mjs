@@ -3,16 +3,18 @@ import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const sourceDirectory = 'internal/app/web/static/analysis'
+/** @param {string} path */
 async function requireMissing(path) {
   try {
     await access(path)
   } catch (error) {
-    if (error.code === 'ENOENT') return
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return
     throw error
   }
   throw new Error(`Refusing to overwrite ${path}`)
 }
 
+/** @param {string} root @param {string} id */
 export async function createLens(root, id) {
   if (!/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/.test(id || '')) {
     throw new Error('Choose a lowercase lens ID, for example: make new-lens NAME=module-overview')
@@ -29,10 +31,17 @@ export async function createLens(root, id) {
   const sourcePath = resolve(root, sourceDirectory, id + '.js')
   const testPath = resolve(root, 'tests', id + '.test.mjs')
   await Promise.all([sourcePath, testPath].map(requireMissing))
-  const title = id.split('-').map(word => word[0].toUpperCase() + word.slice(1)).join(' ')
+  const title = id
+    .split('-')
+    .map((word) => word[0].toUpperCase() + word.slice(1))
+    .join(' ')
   const registration = `  {
-    id: '${id}', key: '${id}', title: '${title}',
-    label: '${title}', description: 'Module and relationship counts in the loaded graph.', icon: '≡',
+    id: '${id}',
+    key: '${id}',
+    title: '${title}',
+    label: '${title}',
+    description: 'Module and relationship counts in the loaded graph.',
+    icon: '≡',
     importModule: () => import('./${id}.js'),
   },
 `
@@ -40,6 +49,7 @@ export async function createLens(root, id) {
 import { metrics, notice } from './ui.js'
 
 // Data logic can be imported and tested without a browser. Keep the graph unchanged.
+/** @param {import('./types.js').GraphPayload} graph */
 export function summarizeGraph(graph) {
   return { moduleCount: graph.nodes.length, relationshipCount: graph.edges.length }
 }
@@ -56,7 +66,10 @@ const lens = {
       host.append(notice(data.error, 'analysis-empty'))
       return
     }
-    host.append(metrics([[data.moduleCount, 'Modules'], [data.relationshipCount, 'Relationships']]))
+    host.append(metrics([
+      [data.moduleCount, 'Modules'],
+      [data.relationshipCount, 'Relationships'],
+    ]))
     host.append(notice('Source: the loaded dependency graph.', 'analysis-provenance'))
   },
 }
@@ -69,7 +82,10 @@ import lens from '../${sourceDirectory}/${id}.js'
 
 test('${id} reads the graph without modifying shared data', async () => {
   const graph = Object.freeze({
-    nodes: Object.freeze([Object.freeze({ id: 'root' }), Object.freeze({ id: 'dependency' })]),
+    nodes: Object.freeze([
+      Object.freeze({ id: 'root' }),
+      Object.freeze({ id: 'dependency' }),
+    ]),
     edges: Object.freeze([Object.freeze({ source: 'root', target: 'dependency' })]),
   })
   const data = await lens.load(graph, { signal: new AbortController().signal })
@@ -85,13 +101,19 @@ test('${id} stops when its graph request is canceled', async () => {
   const created = []
   try {
     await mkdir(resolve(root, 'tests'), { recursive: true })
-    for (const [path, body] of [[sourcePath, source], [testPath, test]]) {
+    for (const [path, body] of [
+      [sourcePath, source],
+      [testPath, test],
+    ]) {
       await writeFile(path, body, { flag: 'wx' })
       created.push(path)
     }
-    await writeFile(registryPath, registry.slice(0, end + 1) + registration + registry.slice(end + 1))
+    await writeFile(
+      registryPath,
+      registry.slice(0, end + 1) + registration + registry.slice(end + 1),
+    )
   } catch (error) {
-    await Promise.all(created.map(path => unlink(path)))
+    await Promise.all(created.map((path) => unlink(path)))
     throw error
   }
   return { sourcePath, testPath }
@@ -101,12 +123,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const root = fileURLToPath(new URL('../', import.meta.url))
   const [command, id, ...extra] = process.argv.slice(2)
   try {
-    if (command !== 'new' || extra.length) throw new Error('Usage: node tools/lenses.mjs new <lens-id>')
+    if (command !== 'new' || extra.length)
+      throw new Error('Usage: node tools/lenses.mjs new <lens-id>')
     const { sourcePath, testPath } = await createLens(root, id)
     console.log(`Created ${sourcePath}\nCreated ${testPath}\nRegistered the lens.`)
     console.log(`Next: make test-js\nOpen: ?lens=${id}#target=github.com%2Fspf13%2Fcobra`)
   } catch (error) {
-    console.error(error.message)
+    console.error(error instanceof Error ? error.message : String(error))
     process.exitCode = 1
   }
 }
