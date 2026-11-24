@@ -16,6 +16,7 @@ var documentPage = template.Must(template.New("document").Parse(`<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; base-uri 'none'; form-action 'none'; style-src 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{.Title}} · go.mod Lens</title>
   <link rel="stylesheet" href="./assets/legal.css">

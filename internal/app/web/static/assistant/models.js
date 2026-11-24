@@ -3,7 +3,8 @@ import { catalog, catalogInfo } from './model-catalog.js'
 
 export { catalogInfo }
 export const defaultModelID = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC'
-export const runtimeURL = `https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@${catalogInfo.version}/lib/index.js`
+export const runtimeURL = new URL(`../vendor/web-llm-${catalogInfo.version}.js`, import.meta.url)
+  .href
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 /** @param {number | null | undefined} bytes */
 const weightSize = (bytes) =>

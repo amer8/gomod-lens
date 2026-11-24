@@ -312,7 +312,13 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
   footer.append(footerFeedback, footerActions)
   dock.append(grip, controls, modelGate, transcript, starters, form, footer)
   app.append(launch, dock)
-  const ai = new LocalAI({ progress: modelMessage })
+  const ai = new LocalAI({
+    progress: modelMessage,
+    onFailure(message) {
+      modelMessage(message)
+      updateAI()
+    },
+  })
 
   /** @param {string} text @param {{progress?: unknown, timeElapsed?: unknown}} [report] */
   function modelMessage(text, report) {

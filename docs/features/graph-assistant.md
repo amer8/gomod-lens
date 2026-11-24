@@ -153,8 +153,21 @@ update the records using their MLC chat templates and weight-file metadata.
 Edit the canonical catalog, rebuild with `make wasm`, and update `catalogInfo.version`,
 `source` and `checked` together when changing the pinned runtime.
 `tools/webllm-shortlist.json` defines the ten exact IDs, selection notes and
-model-card sources; keep it aligned with the catalog. The runtime URL uses the
-snapshot's version. Run `node --test tests/assistant-models.test.mjs tests/assistant-profiles.test.mjs` after changes.
+model-card sources; keep it aligned with the catalog.
+
+The worker imports `assets/vendor/web-llm-0.2.86.js` from the app's origin.
+To reproduce that file, download the npm tarball for the pinned version and
+verify its SHA-512 against the signed npm registry integrity before extracting
+`package/lib/index.js`. For 0.2.86 the tarball integrity is
+`sha512-plciXBCYtY7iTKHzEcsqOfSO+s5u8NqMYFPnHmRbsN8CEdKcolgXIoGLPbzO6FtJHV43m7YP00x6qQ6Kb8CJJw==`.
+Keep the extracted bytes intact. On upgrades, update the versioned filename and
+the SHA-256 in `tools/webllm-runtime.sha256`. Run `make check` to verify the
+bundle, build the site and test the assistant.
+
+GitHub Pages serves the CSP in the HTML head. The cache and inference workers
+start from a shared blob containing a single import of the local worker module.
+This gives both workers the page's script and connection restrictions on static
+hosting. WebAssembly compilation is enabled for the Go resolver and model runtime.
 
 ### Internal model profiles
 
@@ -177,10 +190,11 @@ Model verification is a developer task. The user-facing chooser has no check
 column, test button or session test status, and loading a model does not run test
 inferences before the user can chat.
 
-Open `/assets/assistant/dev-checks.html` on a local preview server to run the
+Run `make serve` and open `http://localhost:4173/assets/assistant/dev-checks.html` to run the
 shortlist sequentially. The developer runner calls the same `LocalAI` worker,
 profile-specific prompts, JSON planner and answer parser used by the app. Only
-one test model occupies GPU memory at a time. Uncached weights are downloaded
+one test model occupies GPU memory at a time. The preview serves the two runner
+files directly from the source tree. The Pages build excludes both files. Uncached weights are downloaded
 on explicit **Run 10 models**; **Stop** terminates the current worker. Repeat the
 `model` query parameter with exact IDs to run a subset; the developer runner
 allows extra startup time for uncached large models.
@@ -219,7 +233,7 @@ again, even if its downloaded files are cached.
 The footer displays the loaded model name, and each answer retains its
 original model label. Closing the dock keeps the model loaded.
 
-Ejecting or canceling releases the worker without deleting downloaded files.
+Ejecting a model or canceling its initial load releases the worker and keeps downloaded files.
 The browser/runtime may reuse its cache when loading again. Browser site-data
 controls can clear cached files. Reloading the page releases the worker and
 clears the in-memory chat history.
@@ -256,10 +270,12 @@ commands, create graph actions, or generate clickable links. All answers require
 a loaded model and successful inference.
 If loading or inference fails, an error is shown without a model-free answer.
 Unsupported WebGPU browsers cannot chat; graph and lens features remain available.
-Stopping inference terminates the worker; reload the model before continuing.
+Stopping an answer interrupts the active inference and keeps the model ready.
+A timed-out inference also receives an interrupt. If the worker still has not
+finished the request after ten seconds, the app releases it and prompts for a reload.
 
-Inference stays on the device. Loading AI makes requests to jsDelivr, Hugging
-Face, and GitHub for runtime/model artifacts. Evidence lookups still use the
+Inference stays on the device. Loading a model fetches its artifacts from Hugging
+Face and GitHub. Evidence lookups still use the
 external services documented in `PRIVACY.md`; this is not an offline mode.
 
 ## Code map and validation
@@ -297,7 +313,8 @@ the old request must stop and its graph actions must become unavailable. Try
 `github.com/google/uuid@v1.6.0` for a small graph. Check narrow-screen layout,
 keyboard controls, and unsupported-WebGPU fallback. On a WebGPU device, enable
 the model, ask a differently worded question, and stop inference.
-Verify the chat is locked before loading and after stopping inference, and that failed
+Verify the chat is locked before loading, that you can ask a follow-up immediately
+after stopping inference without reloading the model, and that failed
 inference never produces a fallback answer. Drag-resize, expand, minimise, and
 close/reopen the dock on desktop and mobile; conversation content must survive
 resizing.

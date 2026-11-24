@@ -38,6 +38,12 @@ func TestSyncAssetsBuildsFromCanonicalSourcesAndRemovesObsoleteOutputs(t *testin
 	if err := os.WriteFile(stale, []byte("obsolete entrypoint"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	devFiles := []string{"assistant/dev-checks.html", "assistant/dev-checks.js"}
+	for _, name := range devFiles {
+		if err := os.WriteFile(filepath.Join(root, assetsSource, name), []byte("developer runner"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if err := (builder{root: root}).syncAssets(); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +55,11 @@ func TestSyncAssetsBuildsFromCanonicalSourcesAndRemovesObsoleteOutputs(t *testin
 	}
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Fatalf("obsolete output remains: %v", err)
+	}
+	for _, name := range devFiles {
+		if _, err := os.Stat(filepath.Join(root, assetsTarget, name)); !os.IsNotExist(err) {
+			t.Errorf("developer asset %s in public build: %v", name, err)
+		}
 	}
 	body, err := os.ReadFile(filepath.Join(root, "dist", "index.html"))
 	if err != nil {

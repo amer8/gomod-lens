@@ -199,6 +199,10 @@ func copyDirectory(source, target string) error {
 		if err != nil {
 			return fmt.Errorf("resolve %s relative to %s: %w", path, source, err)
 		}
+		switch filepath.ToSlash(relative) {
+		case "assistant/dev-checks.html", "assistant/dev-checks.js":
+			return nil
+		}
 		destination := filepath.Join(target, relative)
 
 		info, err := entry.Info()

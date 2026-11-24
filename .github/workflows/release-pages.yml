@@ -44,6 +44,8 @@ jobs:
           test -f dist/assets/app.js
           test -f dist/assets/wasm-client.js
           test -f dist/assets/vendor/ngraph.forcelayout.js
+          test ! -e dist/assets/assistant/dev-checks.html
+          test ! -e dist/assets/assistant/dev-checks.js
           test -f dist/privacy.html
           test -f dist/notices.html
           test -f dist/assets/licenses/Go.txt

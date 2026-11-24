@@ -10,6 +10,18 @@ export { runtimeURL }
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value)
 
+// A blob worker inherits the page's CSP on static hosts without header configuration.
+// Share one bootstrap URL for the lifetime of this document, including cache checks.
+let workerURL = ''
+function createAssistantWorker() {
+  if (!workerURL) {
+    const entry = new URL('./worker.js', import.meta.url)
+    const source = new Blob([`import ${JSON.stringify(entry.href)}`], { type: 'text/javascript' })
+    workerURL = URL.createObjectURL(source)
+  }
+  return new Worker(workerURL, { type: 'module' })
+}
+
 // Read the runtime's real cache state in a short-lived worker, without loading
 // model weights or allocating a GPU. Unknown results must not become cache hits.
 /**
@@ -17,7 +29,7 @@ const object = (value) => value !== null && typeof value === 'object' && !Array.
  * @returns {Promise<Map<string, boolean | null>>}
  */
 export async function inspectModelCache({
-  workerFactory = () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }),
+  workerFactory = createAssistantWorker,
   timeout = 20000,
 } = {}) {
   const worker = workerFactory()
@@ -54,7 +66,7 @@ export async function inspectModelCache({
         finish(null, records)
       }
       try {
-        worker.postMessage({ type: 'cache', id: 1, runtimeURL })
+        worker.postMessage({ type: 'cache', id: 1 })
       } catch (error) {
         finish(error)
       }
@@ -65,13 +77,15 @@ export async function inspectModelCache({
 }
 
 export class LocalAI {
-  /** @param {{workerFactory?: () => Worker, progress?: (text: string, report: {progress?: unknown, timeElapsed?: unknown}) => void}} [options] */
+  /** @param {{workerFactory?: () => Worker, progress?: (text: string, report: {progress?: unknown, timeElapsed?: unknown}) => void, onFailure?: (message: string) => void}} [options] */
   constructor({
-    workerFactory = () => new Worker(new URL('./worker.js', import.meta.url), { type: 'module' }),
+    workerFactory = createAssistantWorker,
     progress = () => {},
+    onFailure = () => {},
   } = {}) {
     this.workerFactory = workerFactory
     this.progress = progress
+    this.onFailure = onFailure
     /** @type {Map<number, PendingRequest>} */
     this.pending = new Map()
     this.next = 0
@@ -120,11 +134,10 @@ export class LocalAI {
       }
     }
     worker.onerror = () => {
-      if (this.worker === worker)
-        this.stop(new Error('Local AI could not start. Reload the model to chat.'))
+      if (this.worker === worker) this.fail('Local AI worker failed. Reload the model to chat.')
     }
     try {
-      await this.request('init', { runtimeURL, modelID: selectedID }, { timeout })
+      await this.request('init', { modelID: selectedID }, { timeout })
       if (this.worker !== worker) throw new DOMException('Stopped', 'AbortError')
       this.loadedModelID = selectedID
       this.ready = true
@@ -231,20 +244,49 @@ export class LocalAI {
     const id = ++this.next,
       worker = this.worker
     return new Promise((resolve, reject) => {
-      const abort = () => this.stop(signal?.reason || new DOMException('Stopped', 'AbortError'))
-      const timer = setTimeout(
-        () => this.stop(new Error('Local AI timed out. Reload the model and try again.')),
-        timeout,
-      )
+      const abort = () => cancel(signal?.reason || new DOMException('Stopped', 'AbortError'))
+      let timer = setTimeout(() => cancel(new Error('Local AI timed out. Try again.')), timeout)
       const cleanup = () => {
         clearTimeout(timer)
         signal?.removeEventListener('abort', abort)
         this.pending.delete(id)
       }
-      this.pending.set(id, { resolve, reject, cleanup, onText, onStatus })
+      const pending = { resolve, reject, cleanup, onText, onStatus }
+      /** @param {unknown} reason */
+      const cancel = (reason) => {
+        if (type !== 'answer' && type !== 'query') {
+          this.stop(reason)
+          return
+        }
+        // Reject immediately. Keep the entry until the worker finishes unwinding.
+        reject(reason)
+        pending.onText = pending.onStatus = undefined
+        signal?.removeEventListener('abort', abort)
+        clearTimeout(timer)
+        timer = setTimeout(
+          () => this.fail('Local AI stopped responding. Reload the model to chat.'),
+          10000,
+        )
+        try {
+          worker.postMessage({ type: 'interrupt', id })
+        } catch {
+          this.fail('Local AI worker failed. Reload the model to chat.')
+        }
+      }
+      this.pending.set(id, pending)
       signal?.addEventListener('abort', abort, { once: true })
-      worker.postMessage({ id, type, ...payload })
+      try {
+        worker.postMessage({ id, type, ...payload })
+      } catch (error) {
+        cleanup()
+        reject(error)
+      }
     })
+  }
+  /** @param {string} message */
+  fail(message) {
+    this.stop(new Error(message))
+    this.onFailure(message)
   }
   /** @param {unknown} [reason] */
   stop(reason = new DOMException('Stopped', 'AbortError')) {

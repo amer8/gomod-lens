@@ -10,6 +10,12 @@ Packages:
 - ngraph.events 1.2.2, BSD-3-Clause
 - ngraph.merge 1.0.0, MIT
 - ngraph.random 1.1.0, BSD-3-Clause
+- WebLLM 0.2.86, Apache-2.0 (full license in ../licenses/Apache-2.0.txt).
+  web-llm-0.2.86.js is the unmodified lib/index.js from the npm package.
+
+ngraph.physics2d.js contains the Body, Vector, quadtree, bounds, drag, spring
+and integrator functions emitted by the ngraph.forcelayout 3.3.1 generators
+for dimension 2. The layout uses these static functions under the site's CSP.
 
 ngraph.forcelayout 3.3.1
 ------------------------

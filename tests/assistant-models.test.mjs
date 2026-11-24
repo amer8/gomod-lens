@@ -57,7 +57,11 @@ test('catalog contains exactly the curated ten and excludes removed runtime vari
   assert.equal(models.filter((model) => model.recommended).length, 1)
   assert.equal(findModel(defaultModelID).recommended, true)
   assert.equal(catalogInfo.version, '0.2.86')
-  assert.ok(runtimeURL.includes('@' + catalogInfo.version + '/'))
+  assert.equal(
+    runtimeURL,
+    new URL(`../internal/app/web/static/vendor/web-llm-${catalogInfo.version}.js`, import.meta.url)
+      .href,
+  )
   assert.ok(
     models.every(
       (model) =>
@@ -172,6 +176,30 @@ test('failed loading leaves no worker or ready identity', async (t) => {
   assert.equal(ai.worker, null)
   assert.equal(ai.ready, false)
   assert.equal(ai.pending.size, 0)
+})
+
+test('inference timeout interrupts one request and tears down only if the worker stays hung', async (t) => {
+  browserGPU(t)
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const { ai, workers } = harness()
+  t.after(() => ai.stop())
+  const load = ai.enable()
+  const worker = workers[0]
+  worker.settle()
+  await load
+  for (const responsive of [true, false]) {
+    const answer = ai.request('answer', {}, { timeout: 50 })
+    const { id } = worker.messages.at(-1)
+    t.mock.timers.tick(50)
+    await assert.rejects(answer, /timed out/)
+    assert.deepEqual(worker.messages.at(-1), { type: 'interrupt', id })
+    assert.equal(ai.ready, true)
+    if (responsive) worker.onmessage({ data: { id, error: 'Interrupted' } })
+    t.mock.timers.tick(10000)
+    assert.equal(worker.terminated, !responsive)
+    assert.equal(ai.ready, responsive)
+    assert.equal(ai.pending.size, 0)
+  }
 })
 
 test('malformed worker messages do not settle or stream an active request', async (t) => {

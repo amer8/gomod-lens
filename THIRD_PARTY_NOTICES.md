@@ -48,7 +48,7 @@ and [Phi-4-mini license](https://huggingface.co/microsoft/Phi-4-mini-instruct/bl
 
 | Package | Version | License | Use |
 | --- | --- | --- | --- |
-| `ngraph.forcelayout` | `3.3.1` | BSD-3-Clause | Self-hosted for force-directed graph layout |
+| `ngraph.forcelayout` | `3.3.1` | BSD-3-Clause | Self-hosted with the 2D physics functions generated ahead of time for the site's content security policy |
 | `ngraph.events` | `1.2.2` | BSD-3-Clause | Transitive event helper for `ngraph.forcelayout` |
 | `ngraph.merge` | `1.0.0` | MIT | Transitive option-merge helper for `ngraph.forcelayout` |
 | `ngraph.random` | `1.1.0` | BSD-3-Clause | Transitive random-number helper for `ngraph.forcelayout` |
@@ -68,14 +68,14 @@ uses these same runtime files and adds no graph dependencies.
 
 | Component | Version | License | Use |
 | --- | --- | --- | --- |
-| [WebLLM](https://github.com/mlc-ai/web-llm) | `0.2.86` | Apache-2.0 | Imported from jsDelivr when opening the model chooser to inspect cache state; interprets suggested investigations and generates custom answers locally in a Web Worker |
+| [WebLLM](https://github.com/mlc-ai/web-llm) | `0.2.86` | Apache-2.0 | The app serves the verified npm JavaScript bundle from its own origin for model cache inspection and local inference |
 | [WebLLM model catalog](https://github.com/mlc-ai/web-llm/blob/v0.2.86/src/config.ts) | `0.2.86` selected language-model variants | Catalog configuration: Apache-2.0; individual weights have their respective upstream licenses | Metadata snapshot in `assistant/model-catalog.js`; weights load only on explicit selection. Each choice links its upstream model card and license |
 
 The recommended default is [Qwen2.5-1.5B-Instruct](https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f32_1-MLC)
 (Apache-2.0). Other selected weights include models under Llama community license terms
 and Microsoft Phi under MIT. See the selected model card for its applicable notices.
-On-demand runtime/model files are not vendored in this repository. Their upstream
-distributions retain their respective license notices. The WebLLM catalog
+The selected model's weights and model-specific WebAssembly library are
+downloaded on demand from their upstream distributions. The WebLLM catalog
 configuration is a modified selection: ten models are retained, and download
 sizes, display metadata and capability annotations are added.
 Model download-size metadata

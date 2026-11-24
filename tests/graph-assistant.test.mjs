@@ -197,21 +197,34 @@ test('chat requires a loaded model and never dispatches model-free requests', as
   await assert.rejects(ai.interpret('Show dependencies', context, []), /Load the local model/)
   assert.equal(posted, false)
 })
-test('stopping a local-AI request terminates its worker and rejects pending work', async () => {
-  let terminated = false
-  const ai = new LocalAI()
-  ai.worker = {
-    postMessage() {},
-    terminate() {
-      terminated = true
-    },
-  }
-  ai.ready = true
+test('stopping an answer keeps the loaded model ready for the next question', async (t) => {
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'navigator')
+  Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { gpu: {} } })
+  t.after(() => Object.defineProperty(globalThis, 'navigator', previous))
+  const messages = [],
+    tokens = []
+  const worker = { postMessage: (value) => messages.push(value), terminate() {} }
+  const ai = new LocalAI({ workerFactory: () => worker })
+  t.after(() => ai.stop())
+  const load = ai.enable()
+  worker.onmessage({ data: { id: messages[0].id, value: true } })
+  await load
+  const loaded = ai.loadedModelID
   const controller = new AbortController()
-  const promise = ai.interpret('Show dependencies', context, [], controller.signal)
+  const packet = { facts: [], rootModule: 'root', selectedModule: 'root' }
+  const promise = ai.answer('First?', packet, [], controller.signal, (text) => tokens.push(text))
+  const { id } = messages.at(-1)
   controller.abort()
   await assert.rejects(promise, { name: 'AbortError' })
-  assert.equal(terminated, true)
+  assert.deepEqual(messages.at(-1), { type: 'interrupt', id })
+  const next = ai.answer('Next?', packet, [])
+  worker.onmessage({ data: { type: 'token', id, text: 'late token' } })
+  worker.onmessage({ data: { id, value: { text: 'late answer' } } })
+  worker.onmessage({ data: { id: messages.at(-1).id, value: { text: 'Next answer' } } })
+  assert.equal(await next, 'Next answer')
+  assert.deepEqual(tokens, [])
+  assert.equal(ai.worker, worker)
+  assert.equal(ai.loadedModelID, loaded)
   assert.equal(ai.pending.size, 0)
-  assert.equal(ai.ready, false)
+  assert.equal(ai.ready, true)
 })

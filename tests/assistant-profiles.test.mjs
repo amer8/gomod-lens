@@ -115,8 +115,7 @@ test('app-check badges cannot be inferred from a loaded model, partial results o
   assert.equal(checkSummary(checkedReport(failed, qwen)).label, '2/3 passed')
 })
 test('worker app checks run production inference and retain failed cases without streaming fixture answers', async (t) => {
-  const previousSelf = globalThis.self,
-    previousEngine = globalThis.profileEngine
+  const previousSelf = globalThis.self
   const messages = [],
     requests = []
   globalThis.self = {
@@ -125,7 +124,7 @@ test('worker app checks run production inference and retain failed cases without
     },
   }
   let correct = true
-  globalThis.profileEngine = {
+  const engine = {
     chat: {
       completions: {
         async create(request) {
@@ -149,14 +148,12 @@ test('worker app checks run production inference and retain failed cases without
   }
   t.after(() => {
     globalThis.self = previousSelf
-    globalThis.profileEngine = previousEngine
   })
-  await import('../internal/app/web/static/assistant/worker.js?profiles-test')
-  const handler = globalThis.self.onmessage
-  const runtimeURL =
-    'data:text/javascript,' +
-    encodeURIComponent('export async function CreateMLCEngine(){return globalThis.profileEngine}')
-  await handler({ data: { id: 1, type: 'init', modelID: qwen, runtimeURL } })
+  const { handleRequest } = await import(
+    '../internal/app/web/static/assistant/worker.js?profiles-test'
+  )
+  const handler = (event) => handleRequest(event, async () => ({ CreateMLCEngine: () => engine }))
+  await handler({ data: { id: 1, type: 'init', modelID: qwen } })
   await handler({ data: { id: 2, type: 'validate' } })
   const result = checkedReport(
     messages.find((message) => message.id === 2 && message.value).value,

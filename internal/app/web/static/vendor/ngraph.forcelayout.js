@@ -1,6 +1,7 @@
 import n from './ngraph.merge.js'
 import e from './ngraph.events-1.2.2.js'
 import t from './ngraph.random.js'
+import { physics2D } from './ngraph.physics2d.js'
 var o = { exports: {} },
   r = { exports: {} },
   i = function (n) {
@@ -201,7 +202,7 @@ var M = function (o) {
       dimensions: 2,
       debug: !1,
     })
-    var d = Q[o.dimensions]
+    var d = o.dimensions === 2 && !o.debug ? physics2D : Q[o.dimensions]
     if (!d) {
       var s = o.dimensions
       ;((d = {

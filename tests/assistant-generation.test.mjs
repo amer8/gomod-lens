@@ -80,16 +80,11 @@ test('JSON planning strips the runtime empty thinking prefix before parsing', ()
 })
 
 test('actual worker emits final-answer tokens and status, but never hidden reasoning', async (t) => {
-  const originalSelf = globalThis.self,
-    originalEngine = globalThis.assistantTestEngine
+  const originalSelf = globalThis.self
   const messages = [],
     requests = []
-  globalThis.self = {
-    postMessage(value) {
-      messages.push(value)
-    },
-  }
-  const engine = (globalThis.assistantTestEngine = {
+  globalThis.self = { postMessage: (value) => messages.push(value) }
+  const engine = {
     chat: {
       completions: {
         async create(request) {
@@ -111,27 +106,32 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
         },
       },
     },
-  })
+  }
   t.after(() => {
     if (originalSelf === undefined) delete globalThis.self
     else globalThis.self = originalSelf
-    if (originalEngine === undefined) delete globalThis.assistantTestEngine
-    else globalThis.assistantTestEngine = originalEngine
   })
-  await import('../internal/app/web/static/assistant/worker.js?generation-test')
-  const handler = globalThis.self.onmessage
-  const runtimeURL =
-    'data:text/javascript,' +
-    encodeURIComponent(
-      'export async function CreateMLCEngine(id, options){options.initProgressCallback({text:"Loading weights",progress:0.42,timeElapsed:2});return globalThis.assistantTestEngine} export async function hasModelInCache(id){if(id.includes("0.5B"))throw new Error("Storage unavailable");return id.includes("1.5B")}',
-    )
-  await handler({ data: { type: 'cache', id: 7, runtimeURL } })
+  const { handleRequest } = await import(
+    '../internal/app/web/static/assistant/worker.js?generation-test'
+  )
+  const runtime = {
+    CreateMLCEngine(id, options) {
+      options.initProgressCallback({ text: 'Loading weights', progress: 0.42, timeElapsed: 2 })
+      return engine
+    },
+    hasModelInCache(id) {
+      if (id.includes('0.5B')) throw new Error('Storage unavailable')
+      return id.includes('1.5B')
+    },
+  }
+  const handler = (event) => handleRequest(event, async () => runtime)
+  await handler({ data: { type: 'cache', id: 7 } })
   const cached = messages.find((value) => value.id === 7).value
   assert.equal(cached.length, models.length)
   assert.equal(cached.find((value) => value.id === qwen25).cached, true)
   assert.equal(cached.find((value) => value.id.includes('0.5B')).cached, null)
   assert.equal(requests.length, 0) // Cache inspection never invokes inference.
-  await handler({ data: { type: 'init', id: 1, modelID: qwen3, runtimeURL } })
+  await handler({ data: { type: 'init', id: 1, modelID: qwen3 } })
   assert.ok(
     messages.some(
       (value) => value.type === 'progress' && value.progress === 0.42 && value.timeElapsed === 2,
@@ -222,6 +222,69 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
   })
   assert.match(messages.find((value) => value.id === 4 && value.error).error, /final answer/)
   assert.doesNotMatch(JSON.stringify(messages), /PRIVATE_REASONING/)
+})
+
+test('interrupting a planner skips its retry and keeps the next generation on the same engine', async (t) => {
+  const messages = [],
+    requests = []
+  const previous = globalThis.self
+  globalThis.self = { postMessage: (message) => messages.push(message) }
+  t.after(() => {
+    if (previous === undefined) delete globalThis.self
+    else globalThis.self = previous
+  })
+  const planning = Promise.withResolvers(),
+    finishing = Promise.withResolvers()
+  let interrupts = 0
+  const engine = {
+    interruptGenerate() {
+      interrupts++
+    },
+    chat: {
+      completions: {
+        async create(request) {
+          requests.push(request)
+          if (request.stream)
+            return (async function* () {
+              yield { choices: [{ delta: { content: 'Next answer' } }] }
+            })()
+          planning.resolve()
+          await finishing.promise
+          return { choices: [{ message: { content: '{' } }] }
+        },
+      },
+    },
+  }
+  const { handleRequest } = await import(
+    '../internal/app/web/static/assistant/worker.js?interrupt-test'
+  )
+  await handleRequest({ data: { id: 1, type: 'init', modelID: qwen25 } }, async () => ({
+    CreateMLCEngine: () => engine,
+  }))
+  const dispatch = (data) => handleRequest({ data })
+  const first = dispatch({
+    id: 2,
+    type: 'query',
+    question: '?',
+    topics: { paths: 'Paths' },
+    nodes: [{ id: 'root' }],
+    selected: 'root',
+    asked: [],
+  })
+  await planning.promise
+  await dispatch({ id: 2, type: 'interrupt' })
+  const answer = { type: 'answer', question: '?', evidence: '', history: [], thinking: false }
+  const skipped = dispatch({ ...answer, id: 3 })
+  await dispatch({ id: 3, type: 'interrupt' })
+  const next = dispatch({ ...answer, id: 4 })
+  assert.equal(requests.length, 1)
+  assert.equal(interrupts, 1)
+  finishing.resolve()
+  await Promise.all([first, skipped, next])
+  assert.equal(requests.length, 2)
+  assert.ok(messages.find((m) => m.id === 2).error)
+  assert.ok(messages.find((m) => m.id === 3).error)
+  assert.equal(messages.find((m) => m.id === 4 && m.value).value.text, 'Next answer')
 })
 
 test('removed reasoning models cannot be selected, while their output markers remain safely filtered', () => {

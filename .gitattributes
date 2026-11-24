@@ -1,0 +1,2 @@
+# Preserve the exact npm bytes checked by the static build.
+internal/app/web/static/vendor/web-llm-*.js binary

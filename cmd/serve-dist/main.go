@@ -13,8 +13,9 @@ import (
 
 func main() {
 	var (
-		dir  = flag.String("dir", "dist", "Directory containing the static GitHub Pages artifact")
-		port = flag.String("port", "4173", "HTTP port or address to listen on")
+		dir       = flag.String("dir", "dist", "Directory containing the static GitHub Pages artifact")
+		port      = flag.String("port", "4173", "HTTP port or address to listen on")
+		devChecks = flag.Bool("dev-checks", false, "Serve the developer model checks from the source tree")
 	)
 	flag.Parse()
 
@@ -32,7 +33,17 @@ func main() {
 
 	address := normalizeAddress(*port)
 	log.Printf("serving %s at %s", root, displayAddress(address))
-	if err := http.ListenAndServe(address, noCache(http.FileServer(http.Dir(root)))); err != nil {
+	mux := http.NewServeMux()
+	mux.Handle("/", http.FileServer(http.Dir(root)))
+	if *devChecks {
+		source := os.DirFS("internal/app/web/static/assistant")
+		for _, name := range []string{"dev-checks.html", "dev-checks.js"} {
+			mux.HandleFunc("GET /assets/assistant/"+name, func(w http.ResponseWriter, r *http.Request) {
+				http.ServeFileFS(w, r, source, name)
+			})
+		}
+	}
+	if err := http.ListenAndServe(address, noCache(mux)); err != nil {
 		log.Fatalf("listen: %v", err)
 	}
 }

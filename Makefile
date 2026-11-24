@@ -52,10 +52,11 @@ tidy-check: cache-dirs ## Verify go.mod and go.sum are tidy.
 	git diff --exit-code -- go.mod go.sum
 
 wasm: cache-dirs ## Generate the complete static deployment in dist/.
+	shasum -a 256 -c tools/webllm-runtime.sha256
 	$(GO_ENV) $(GO) run ./cmd/build-static-wasm -go "$(GO)"
 
 serve: wasm ## Build and serve the static deployment on PORT, default 4173.
-	$(GO_ENV) $(GO) run ./cmd/serve-dist -port $(PORT)
+	$(GO_ENV) $(GO) run ./cmd/serve-dist -dev-checks -port $(PORT)
 
 check: fmt-check tidy-check wasm vet vet-wasm test test-js test-wasm typecheck ## Run the same checks used by CI.
 
