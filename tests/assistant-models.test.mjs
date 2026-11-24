@@ -9,7 +9,9 @@ import {
   filterModels,
   catalogInfo,
   runtimeURL,
+  pinnedModelConfig,
 } from '../internal/app/web/static/assistant/models.js'
+import { prebuiltAppConfig, verifyIntegrity } from '../internal/app/web/static/vendor/web-llm-0.2.89.js'
 import { LocalAI } from '../internal/app/web/static/assistant/local-ai.js'
 
 function browserGPU(t) {
@@ -43,6 +45,20 @@ function harness() {
   })
   return { ai, workers }
 }
+
+test('every curated model keeps its upstream configuration and requires matching library bytes', async () => {
+  assert.throws(() => pinnedModelConfig({ model_list: [] }), /Missing pinned library/)
+  for (const record of pinnedModelConfig(prebuiltAppConfig).model_list) {
+    const original = prebuiltAppConfig.model_list.find((item) => item.model_id === record.model_id)
+    assert.equal(record.model_lib.split('/').at(-1), original.model_lib.split('/').at(-1))
+    assert.equal(record.model, original.model)
+    assert.deepEqual(record.overrides, original.overrides)
+    await assert.rejects(
+      verifyIntegrity(new Uint8Array([0]), record.integrity.model_lib, record.model_lib, record.integrity.onFailure),
+      { name: 'IntegrityError' },
+    )
+  }
+})
 
 test('catalog contains exactly the curated ten and excludes removed runtime variants', () => {
   const selection = JSON.parse(

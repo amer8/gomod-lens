@@ -27,19 +27,20 @@ type GraphMeta struct {
 
 // Node represents a module version in the dependency graph.
 type Node struct {
-	ID              string         `json:"id"`
-	Name            string         `json:"name"`
-	Version         string         `json:"version,omitempty"`
-	Root            bool           `json:"root"`
-	Main            bool           `json:"main"`
-	Direct          bool           `json:"direct"`
-	Replaced        bool           `json:"replaced"`
-	Replacement     string         `json:"replacement,omitempty"`
-	InDegree        int            `json:"inDegree"`
-	OutDegree       int            `json:"outDegree"`
-	DescendantCount *int           `json:"descendantCount,omitempty"`
-	GoRequirement   *GoRequirement `json:"goRequirement,omitempty"`
-	Lenses          LensResults    `json:"lenses,omitempty"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	Version          string         `json:"version,omitempty"`
+	Root             bool           `json:"root"`
+	Main             bool           `json:"main"`
+	Direct           bool           `json:"direct"`
+	Replaced         bool           `json:"replaced"`
+	Replacement      string         `json:"replacement,omitempty"`
+	LocalReplacement bool           `json:"localReplacement,omitempty"`
+	InDegree         int            `json:"inDegree"`
+	OutDegree        int            `json:"outDegree"`
+	DescendantCount  *int           `json:"descendantCount,omitempty"`
+	GoRequirement    *GoRequirement `json:"goRequirement,omitempty"`
+	Lenses           LensResults    `json:"lenses,omitempty"`
 }
 
 // ModuleIdentity is the public module/version used to obtain metadata.

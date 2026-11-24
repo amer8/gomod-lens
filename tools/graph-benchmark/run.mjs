@@ -1,8 +1,8 @@
 import { createServer } from 'node:http'
-import { readFile, writeFile } from 'node:fs/promises'
-import { resolve, extname } from 'node:path'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { resolve, extname, join } from 'node:path'
 import { createRequire } from 'node:module'
-import { platform, release, arch, cpus } from 'node:os'
+import { platform, release, arch, cpus, tmpdir } from 'node:os'
 import { verifyBrowser, compareBaseline } from './verify.mjs'
 
 const require = createRequire(import.meta.url)
@@ -93,8 +93,9 @@ try {
     throw new Error(
       'No WebGPU adapter. Do not report software/CPU results as a hardware benchmark.',
     )
+  const outputDir = await mkdtemp(join(tmpdir(), 'gomod-lens-benchmark-'))
   const verify = process.argv.includes('--verify')
-  const checks = verify ? await verifyBrowser(page) : undefined
+  const checks = verify ? await verifyBrowser(page, outputDir) : undefined
   if (checks) console.log(JSON.stringify({ checks }))
   let livePayload
   const fixtureArg = process.argv.find((arg) => arg.startsWith('--fixture='))
@@ -113,7 +114,7 @@ try {
       { timeout: 60000 },
     )
     livePayload = await page.evaluate((target) => window.gomodLensResolveGraph(target), target)
-    await page.screenshot({ path: '/private/tmp/gomod-lens-webgpu-app.png' })
+    await page.screenshot({ path: join(outputDir, 'gomod-lens-webgpu-app.png') })
     console.log(
       JSON.stringify({
         liveTarget: livePayload.meta.target,
@@ -175,7 +176,7 @@ try {
         results.push(result)
         console.log(JSON.stringify(result))
         if (smoke && mode === 'webgpu')
-          await page.screenshot({ path: '/private/tmp/gomod-lens-webgpu-smoke.png' })
+          await page.screenshot({ path: join(outputDir, 'gomod-lens-webgpu-smoke.png') })
       }
     }
   }
@@ -197,7 +198,7 @@ try {
     }
   if (!livePayload && !layoutOnly && !smoke) compareBaseline(environment, results)
   if (errors.length) throw new Error(`Browser errors: ${errors.join('\n')}`)
-  const output = process.env.BENCHMARK_OUTPUT || '/private/tmp/gomod-lens-webgpu-benchmark.json'
+  const output = process.env.BENCHMARK_OUTPUT || join(outputDir, 'gomod-lens-webgpu-benchmark.json')
   await writeFile(
     output,
     JSON.stringify(

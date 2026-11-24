@@ -24,6 +24,7 @@
  * @property {number} [descendantCount] Computed once by Go/WASM; zero includes leaves.
  * @property {GoRequirement} [goRequirement] Exact-version Go minimum and source observation.
  * @property {string} [replacement] Resolved name@version, or a local path.
+ * @property {boolean} [localReplacement] The Go parser classified the replacement as a directory.
  * @property {Object<string, {status: string, score?: number, message?: string, details?: Object<string, string>}>} [lenses]
  */
 

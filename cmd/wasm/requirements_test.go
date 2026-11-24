@@ -68,3 +68,16 @@ func TestGraphAndSearchBridgeLimitRequestsWithoutCallerSignal(t *testing.T) {
 		t.Fatalf("expected one request from each bridge, got %d", calls)
 	}
 }
+
+func TestBoundedResponseRead(t *testing.T) {
+	for _, tc := range []struct {
+		body     string
+		tooLarge bool
+	}{{"1234", false}, {"12345", true}} {
+		response := js.Global().Get("Response").New(tc.body)
+		got, err := readResponseText(context.Background(), response, 4)
+		if (err != nil) != tc.tooLarge || !tc.tooLarge && got != tc.body {
+			t.Fatalf("size %d returned %q, %v", len(tc.body), got, err)
+		}
+	}
+}

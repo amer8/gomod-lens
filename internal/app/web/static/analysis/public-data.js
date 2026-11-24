@@ -68,14 +68,16 @@ async function publicData(url, { signal, body, fetcher = fetch } = {}, format) {
   return structuredClone(value)
 }
 /**
- * @param {Pick<import('./types.js').GraphNode, 'name' | 'version' | 'replaced' | 'replacement'> | null | undefined} node
+ * @param {Pick<import('./types.js').GraphNode, 'name' | 'version' | 'replaced' | 'replacement' | 'localReplacement'> | null | undefined} node
  * @returns {ModuleIdentity | null}
  */
 export function publicIdentity(node) {
   if (!node?.name || !node.version) return null
   if (node.replaced) {
-    const replacement = node.replacement || '',
-      at = replacement.lastIndexOf('@')
+    const replacement = node.replacement || ''
+    // Older graph payloads only carry the display string.
+    if (node.localReplacement || /^[./\\]|^[a-z]:/i.test(replacement)) return null
+    const at = replacement.lastIndexOf('@')
     if (at < 1) return null
     const name = replacement.slice(0, at),
       version = replacement.slice(at + 1)

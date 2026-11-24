@@ -25,7 +25,11 @@ github.com/gin-gonic/gin@v1.10.0
 ```
 
 The graph shows resolved module versions and their requirement relationships.
-The browser resolver supports up to 1,500 selected modules, including the root.
+The browser resolver supports up to 1,500 selected modules, including the root,
+and 16,000 distinct edges. It also limits historical version loads and metadata
+size. When the Go module mirror confirms that a repository path and a declared
+module path refer to the same source revision and subdirectory, the shared URL
+uses the verified module and version. Otherwise it keeps the requested identity.
 Use the version selector to load another published release. URLs preserve the
 selected root version and lens, so another person can open the same view.
 

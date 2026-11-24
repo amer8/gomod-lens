@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
+import { join } from 'node:path'
 
-export async function verifyBrowser(page) {
+export async function verifyBrowser(page, outputDir) {
   const initialCamera = await page.evaluate(async () => {
     const { createGraphModel } = await import('/internal/app/web/static/graph-model.js')
     const { createGraphScene, fitCamera } = await import('/internal/app/web/static/graph-scene.js')
@@ -98,7 +99,7 @@ export async function verifyBrowser(page) {
     )
   }
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 390)
-  await page.screenshot({ path: '/private/tmp/gomod-lens-webgpu-mobile.png' })
+  await page.screenshot({ path: join(outputDir, 'gomod-lens-webgpu-mobile.png') })
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.waitForFunction(() => check.scene.dimensions.width === 1280)
   assert.deepEqual(await page.evaluate(() => ({ ...check.scene.camera })), beforeResize.camera)

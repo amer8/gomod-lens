@@ -40,11 +40,9 @@ test('proxy lookup escapes uppercase module paths and retains loaded pseudo-vers
     fetcher: async (url, options) => {
       assert.match(url, /github.com\/!azure\/pkg\//)
       assert.equal(options.credentials, 'omit')
-      return {
-        ok: true,
-        json: async () => ({ Version: 'v1.10.0' }),
-        text: async () => 'v1.9.0\nv1.10.0\nv1.9.0\ninvalid\n',
-      }
+      return url.endsWith('/@v/list')
+        ? new Response('v1.9.0\nv1.10.0\nv1.9.0\ninvalid\n')
+        : Response.json({ Version: 'v1.10.0' })
     },
   })
   assert.equal(data.latest, 'v1.10.0')
@@ -56,18 +54,15 @@ test('partial upstream failures leave loaded and known versions selectable', asy
   const data = await fetchModuleVersions('github.com/google/uuid', 'v1.5.0', {
     fetcher: async (url) =>
       url.endsWith('/@v/list')
-        ? { ok: true, text: async () => 'v1.4.0\nv1.5.0' }
+        ? new Response('v1.4.0\nv1.5.0')
         : { ok: false, status: 503 },
   })
   assert.deepEqual(data.versions, ['v1.5.0', 'v1.4.0'])
   assert.equal(data.latest, '')
   assert.equal(data.partial, true)
   const malformed = await fetchModuleVersions('github.com/google/uuid', 'v1.5.0', {
-    fetcher: async () => ({
-      ok: true,
-      text: async () => '',
-      json: async () => ({ Version: '<invalid>' }),
-    }),
+    fetcher: async (url) =>
+      url.endsWith('/@v/list') ? new Response('') : Response.json({ Version: '<invalid>' }),
   })
   assert.deepEqual(malformed.versions, ['v1.5.0'])
   assert.equal(malformed.latest, '')
@@ -76,11 +71,8 @@ test('partial upstream failures leave loaded and known versions selectable', asy
 test('malformed latest responses remain partial while preserving listed versions', async () => {
   for (const latest of [null, 'v1.6.0', { Version: 16 }, { Version: null }]) {
     const data = await fetchModuleVersions('github.com/google/uuid', 'v1.5.0', {
-      fetcher: async () => ({
-        ok: true,
-        text: async () => 'v1.4.0\n',
-        json: async () => latest,
-      }),
+      fetcher: async (url) =>
+        url.endsWith('/@v/list') ? new Response('v1.4.0\n') : Response.json(latest),
     })
     assert.deepEqual(data.versions, ['v1.5.0', 'v1.4.0'])
     assert.equal(data.latest, '')
@@ -102,13 +94,22 @@ test('an aborted lookup cannot return metadata for a superseded module', async (
   )
 })
 
+test('version selector keeps the loaded version when a list exceeds its budget', async () => {
+  const result = await fetchModuleVersions('example.org/mod', 'v1.0.0', {
+    knownLatest: 'v1.0.0',
+    fetcher: async () => new Response('v1.0.0\n'.repeat(10001)),
+  })
+  assert.equal(result.partial, true)
+  assert.deepEqual(result.versions, ['v1.0.0'])
+})
+
 test('picker reuses the retraction-aware latest release and keeps pinned versions selectable', async () => {
   for (const knownLatest of ['v1.0.0', '']) {
     const data = await fetchModuleVersions('example.org/pinned', 'v1.1.0', {
       knownLatest,
       fetcher: async (url) => {
         assert.ok(url.endsWith('/@v/list'))
-        return { ok: true, text: async () => 'v1.0.0\nv1.1.0' }
+        return new Response('v1.0.0\nv1.1.0')
       },
     })
     assert.equal(data.latest, knownLatest)

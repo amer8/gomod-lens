@@ -14,6 +14,8 @@ Release Freshness checks the highest tagged release’s `go.mod` for retractions
 and excludes retracted versions when choosing the latest release. A pinned
 dependency stays in the graph and appears in the **Retracted** queue. The
 **Lookup failed** queue identifies requests that returned errors.
+Release selection and freshness checks return an error if a version or either
+endpoint of a retraction exceeds 256 bytes.
 
 Select a lens with the centered toolbar, or link to it directly:
 

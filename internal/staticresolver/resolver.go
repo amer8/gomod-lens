@@ -7,10 +7,13 @@ import (
 	"fmt"
 	goversion "go/version"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/mod/module"
 
 	"github.com/amer8/gomod-lens/internal/graph"
 	"github.com/amer8/gomod-lens/internal/modulesearch"
@@ -22,6 +25,11 @@ const (
 	depsDevBaseURL        = "https://api.deps.dev/v3"
 	githubSearchURL       = "https://api.github.com/search/repositories"
 	maxSelectedModules    = 1500
+	maxModuleVersions     = 3000
+	maxGraphEdges         = 16000
+	maxRequirementVisits  = 100000
+	maxGoModBytes         = 1 << 20
+	maxGraphGoModBytes    = 32 << 20
 	moduleLoadConcurrency = 8
 	scoreLoadConcurrency  = 5
 )
@@ -84,6 +92,42 @@ func (r *Resolver) ResolveGraph(ctx context.Context, target string, options Opti
 	if r == nil || r.fetcher == nil {
 		return nil, errors.New("static resolver requires a fetcher")
 	}
+	// Scope the parsed metadata and aggregate budget to this analysis, even when
+	// a caller reuses a Resolver or runs more than one analysis concurrently.
+	scoped := New(&graphFetcher{Fetcher: r.fetcher, remaining: maxGraphGoModBytes})
+	return scoped.resolveGraph(ctx, target, options)
+}
+
+type graphFetcher struct {
+	Fetcher
+	mu        sync.Mutex
+	remaining int
+}
+
+func (f *graphFetcher) FetchText(ctx context.Context, request FetchRequest) (string, error) {
+	if !strings.HasSuffix(request.URL, ".mod") {
+		return f.Fetcher.FetchText(ctx, request)
+	}
+	f.mu.Lock()
+	request.MaxBytes = min(maxGoModBytes, f.remaining)
+	f.mu.Unlock()
+	if request.MaxBytes == 0 {
+		return "", errors.New("module metadata exceeds the browser size limit")
+	}
+	body, err := f.Fetcher.FetchText(ctx, request)
+	if err != nil {
+		return "", err
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(body) > maxGoModBytes || len(body) > f.remaining {
+		return "", errors.New("module metadata exceeds the browser size limit")
+	}
+	f.remaining -= len(body)
+	return body, nil
+}
+
+func (r *Resolver) resolveGraph(ctx context.Context, target string, options Options) (*graph.Graph, error) {
 	progress := newProgressReporter(options.Progress)
 
 	progress.Report(4, "Resolving module")
@@ -102,14 +146,14 @@ func (r *Resolver) ResolveGraph(ctx context.Context, target string, options Opti
 	if err != nil {
 		return nil, err
 	}
-	if declaredPath := declaredRootModulePath(rootMeta.ModulePath, root.Path); declaredPath != root.Path {
-		root = moduleRef{Path: declaredPath, Version: rootVersion, ID: moduleID(declaredPath, rootVersion)}
-		requested = requestedTarget{
-			Target:  moduleID(declaredPath, requested.Version),
-			Path:    declaredPath,
-			Version: requested.Version,
+	declared := rootMeta.ModulePath
+	if declared != root.Path && module.CheckPath(declared) == nil && r.sameModuleOrigin(ctx, root.Path, declared, rootVersion) {
+		canonical, err := r.loadGoMod(ctx, declared, rootVersion)
+		if err == nil && canonical.ModulePath == declared {
+			rootMeta = canonical
+			root = moduleRef{Path: declared, Version: rootVersion, ID: moduleID(declared, rootVersion)}
+			requested.Target = moduleID(declared, rootVersion)
 		}
-		r.cacheGoMod(root.Path, root.Version, rootMeta)
 	}
 	rootReplacements := rootMeta.Replacements
 	rootExclusions := exclusionIndex(rootMeta.Excludes)
@@ -168,12 +212,18 @@ func (r *Resolver) resolveRequestedTarget(ctx context.Context, target string) (r
 	if target == "" {
 		return requestedTarget{}, errors.New("target is required")
 	}
-	if isLikelyLocalTarget(target) || strings.Contains(target, "://") || strings.ContainsAny(target, "?#") {
+	if isLikelyLocalTarget(target) || strings.ContainsAny(target, ":\\?#%") {
 		return requestedTarget{}, errors.New("enter a public Go module path")
 	}
 
 	base, version := splitTargetVersion(target)
+	if strings.Contains(base, "@") {
+		return requestedTarget{}, errors.New("enter a public Go module path")
+	}
 	if !shouldSearchModuleTarget(base) {
+		if module.CheckPath(base) != nil {
+			return requestedTarget{}, errors.New("enter a public Go module path")
+		}
 		return requestedTarget{Target: target, Path: base, Version: version}, nil
 	}
 
@@ -252,8 +302,9 @@ func (r *Resolver) resolveBuildList(ctx context.Context, root moduleRef, rootRep
 		return buildResolution{}, err
 	}
 	requirements := append([]requirement(nil), rootMeta.Requires...)
+	budget := resolutionBudget{versions: maxModuleVersions, requirements: maxRequirementVisits}
 	for {
-		resolution, err := r.resolveRequirements(ctx, root, rootMeta, requirements, rootReplacements, rootExclusions, progress)
+		resolution, err := r.resolveRequirements(ctx, root, rootMeta, requirements, rootReplacements, rootExclusions, progress, &budget)
 		if err != nil || pruningForGoDirective(rootMeta.GoVersion) == pruningUnpruned {
 			return resolution, err
 		}
@@ -274,7 +325,19 @@ func (r *Resolver) resolveBuildList(ctx context.Context, root moduleRef, rootRep
 	}
 }
 
-func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, rootMeta moduleMeta, rootRequirements []requirement, rootReplacements []replacement, rootExclusions map[string]bool, progress *progressReporter) (buildResolution, error) {
+type resolutionBudget struct {
+	versions, requirements int
+}
+
+func (b *resolutionBudget) visit(count int) error {
+	if count > b.requirements {
+		return errors.New("dependency traversal exceeds the browser work limit")
+	}
+	b.requirements -= count
+	return nil
+}
+
+func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, rootMeta moduleMeta, rootRequirements []requirement, rootReplacements []replacement, rootExclusions map[string]bool, progress *progressReporter, budget *resolutionBudget) (buildResolution, error) {
 	resolution := buildResolution{
 		selected: map[string]string{root.Path: root.Version},
 		loaded:   make(map[string]moduleMeta),
@@ -282,13 +345,18 @@ func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, root
 
 	loadModes := make(map[string]loadCandidate)
 	rootPruning := pruningForGoDirective(rootMeta.GoVersion)
+	if err := budget.visit(len(rootRequirements)); err != nil {
+		return buildResolution{}, err
+	}
 	for _, requirement := range rootRequirements {
 		if selectRequirement(resolution.selected, requirement, rootExclusions, root.Path) {
 			if len(resolution.selected) > maxSelectedModules {
 				return buildResolution{}, fmt.Errorf("module graph is too large to resolve in the browser (%d modules)", len(resolution.selected))
 			}
 		}
-		markLoadMode(loadModes, requirement, rootPruning, rootExclusions)
+		if err := markLoadMode(loadModes, requirement, rootPruning, rootExclusions, &budget.versions); err != nil {
+			return buildResolution{}, err
+		}
 	}
 
 	processed := make(map[string]modulePruning)
@@ -346,6 +414,9 @@ func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, root
 			if entry.pruning == pruningUnpruned {
 				nextPruning = pruningUnpruned
 			}
+			if err := budget.visit(len(meta.Requires)); err != nil {
+				return buildResolution{}, err
+			}
 			for _, requirement := range meta.Requires {
 				if selectRequirement(resolution.selected, requirement, rootExclusions, root.Path) {
 					if len(resolution.selected) > maxSelectedModules {
@@ -353,7 +424,9 @@ func (r *Resolver) resolveRequirements(ctx context.Context, root moduleRef, root
 					}
 				}
 				if loadTransitive {
-					markLoadMode(loadModes, requirement, nextPruning, rootExclusions)
+					if err := markLoadMode(loadModes, requirement, nextPruning, rootExclusions, &budget.versions); err != nil {
+						return buildResolution{}, err
+					}
 				}
 			}
 		}
@@ -426,16 +499,23 @@ func (r *Resolver) loadGoMod(ctx context.Context, path, version string) (moduleM
 	return meta, nil
 }
 
-func (r *Resolver) cacheGoMod(path, version string, meta moduleMeta) {
-	if path == "" || version == "" {
-		return
+// A go.mod declaration alone cannot establish that two paths name the same source.
+func (r *Resolver) sameModuleOrigin(ctx context.Context, requested, declared, version string) bool {
+	type origin struct{ VCS, URL, Subdir, Hash string }
+	lookup := func(path string) (origin, bool) {
+		var info struct {
+			Version string
+			Origin  origin
+		}
+		err := r.fetchJSON(ctx, proxyModuleURL(path)+"/@v/"+proxyPathEscape(version)+".info", "application/json", &info)
+		return info.Origin, err == nil && info.Version == version && info.Origin.VCS != "" && info.Origin.URL != "" && info.Origin.Hash != ""
 	}
-	meta.RequestedPath = path
-	meta.RequestedVersion = version
-
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.modFileCache[path+"@"+version] = meta
+	first, ok := lookup(requested)
+	if !ok {
+		return false
+	}
+	second, ok := lookup(declared)
+	return ok && first == second
 }
 
 func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarget string, resolution buildResolution, rootDirectPaths map[string]bool, rootReplacements []replacement, rootExclusions map[string]bool) (*graph.Graph, error) {
@@ -480,6 +560,9 @@ func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarg
 			if seenEdges[key] {
 				continue
 			}
+			if len(edges) >= maxGraphEdges {
+				return nil, fmt.Errorf("module graph exceeds the browser limit of %d edges", maxGraphEdges)
+			}
 			seenEdges[key] = true
 			edges = append(edges, graph.Edge{Source: sourceID, Target: targetID})
 		}
@@ -492,16 +575,17 @@ func (r *Resolver) buildGraph(ctx context.Context, root moduleRef, requestedTarg
 			rule = replacementFor(entry.Path, entry.Version, rootReplacements)
 		}
 		node := graph.Node{
-			ID:          entry.ID,
-			Name:        entry.Path,
-			Version:     entry.Version,
-			Root:        entry.Path == root.Path,
-			Main:        entry.Path == root.Path,
-			Direct:      entry.Path != root.Path && rootDirectPaths[entry.Path],
-			Replaced:    rule != nil,
-			Replacement: replacementTargetID(rule),
-			InDegree:    degrees.in[entry.ID],
-			OutDegree:   degrees.out[entry.ID],
+			ID:               entry.ID,
+			Name:             entry.Path,
+			Version:          entry.Version,
+			Root:             entry.Path == root.Path,
+			Main:             entry.Path == root.Path,
+			Direct:           entry.Path != root.Path && rootDirectPaths[entry.Path],
+			Replaced:         rule != nil,
+			Replacement:      replacementTargetID(rule),
+			LocalReplacement: rule != nil && rule.LocalPath != "",
+			InDegree:         degrees.in[entry.ID],
+			OutDegree:        degrees.out[entry.ID],
 		}
 		if meta, ok := resolution.loaded[entry.ID]; ok && meta.Source != "" {
 			identity, public := goRequirementIdentity(node)
@@ -544,7 +628,18 @@ func (r *Resolver) fetchText(ctx context.Context, requestURL, accept string) (st
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	return r.fetcher.FetchText(ctx, FetchRequest{URL: requestURL, Accept: accept})
+	request := FetchRequest{URL: requestURL, Accept: accept}
+	switch {
+	case strings.HasSuffix(requestURL, ".mod"):
+		request.MaxBytes = maxGoModBytes
+	case strings.HasSuffix(requestURL, "/@v/list"):
+		request.MaxBytes = maxReleaseListBytes
+	}
+	body, err := r.fetcher.FetchText(ctx, request)
+	if err == nil && request.MaxBytes > 0 && len(body) > request.MaxBytes {
+		return "", errors.New("upstream response exceeds the browser size limit")
+	}
+	return body, err
 }
 
 func (r *Resolver) fetchJSON(ctx context.Context, requestURL, accept string, out any) error {
@@ -600,17 +695,22 @@ func selectRequirement(selected map[string]string, requirement requirement, excl
 	return false
 }
 
-func markLoadMode(loadModes map[string]loadCandidate, requirement requirement, pruning modulePruning, exclusions map[string]bool) {
+func markLoadMode(loadModes map[string]loadCandidate, requirement requirement, pruning modulePruning, exclusions map[string]bool, remainingLoads *int) error {
 	if isPseudoModulePath(requirement.Path) || requirement.Version == "" || isRequirementExcluded(requirement, exclusions) {
-		return
+		return nil
 	}
 	id := moduleID(requirement.Path, requirement.Version)
 	if current, ok := loadModes[id]; !ok || pruning > current.pruning {
+		if *remainingLoads == 0 {
+			return fmt.Errorf("module graph exceeds the browser limit of %d module-version loads", maxModuleVersions)
+		}
+		*remainingLoads--
 		loadModes[id] = loadCandidate{
 			moduleRef: moduleRef{Path: requirement.Path, Version: requirement.Version, ID: id},
 			pruning:   pruning,
 		}
 	}
+	return nil
 }
 
 func pruningForGoDirective(version string) modulePruning {
@@ -678,10 +778,16 @@ func NormalizeModuleTarget(target string) string {
 	return normalized
 }
 
-// NormalizeModuleSearchQuery trims search input and removes any requested version suffix.
+var searchInput = regexp.MustCompile(`^([A-Za-z0-9_-][A-Za-z0-9._~/-]*(?: [A-Za-z0-9_-]+)*)(?:@(?:[A-Za-z0-9_/-]*|v[0-9][A-Za-z0-9.+-]*))?$`)
+
+// NormalizeModuleSearchQuery checks the entire input before dropping a version.
+// In particular, never reinterpret the user information in a URL as a query.
 func NormalizeModuleSearchQuery(query string) string {
-	base, _ := splitTargetVersion(strings.TrimSpace(query))
-	return strings.TrimSpace(base)
+	match := searchInput.FindStringSubmatch(strings.TrimSpace(query))
+	if match == nil || isLikelyLocalTarget(match[1]) {
+		return ""
+	}
+	return match[1]
 }
 
 func shouldSearchModuleTarget(target string) bool {
@@ -702,49 +808,14 @@ func isLikelyLocalTarget(target string) bool {
 		strings.HasPrefix(target, "./") ||
 		strings.HasPrefix(target, "../") ||
 		strings.HasPrefix(target, "/") ||
+		strings.HasPrefix(target, "~") ||
+		strings.Contains(target, `\`) ||
+		(len(target) >= 2 && target[1] == ':') ||
 		strings.HasSuffix(target, ".mod")
 }
 
 func isPseudoModulePath(path string) bool {
 	return path == "go" || path == "toolchain"
-}
-
-func declaredRootModulePath(declared, requested string) string {
-	declared = strings.TrimSpace(declared)
-	if !isPlausibleDeclaredModulePath(declared) {
-		return strings.TrimSpace(requested)
-	}
-	return declared
-}
-
-func isPlausibleDeclaredModulePath(path string) bool {
-	if path == "" ||
-		strings.Contains(path, "@") ||
-		strings.Contains(path, "://") ||
-		strings.ContainsAny(path, "?#") ||
-		strings.HasPrefix(path, ".") ||
-		strings.HasPrefix(path, "/") ||
-		isPseudoModulePath(path) {
-		return false
-	}
-
-	for _, r := range path {
-		switch {
-		case r >= 'a' && r <= 'z':
-			continue
-		case r >= 'A' && r <= 'Z':
-			continue
-		case r >= '0' && r <= '9':
-			continue
-		}
-		switch r {
-		case '/', '.', '-', '_', '~':
-			continue
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func exclusionIndex(exclusions []exclusion) map[string]bool {
@@ -830,6 +901,8 @@ func mapLimit[T any](ctx context.Context, items []T, limit int, worker func(inde
 	if limit <= 0 || limit > len(items) {
 		limit = len(items)
 	}
+	dispatch, stop := context.WithCancel(ctx)
+	defer stop()
 
 	type job struct {
 		index int
@@ -846,13 +919,14 @@ func mapLimit[T any](ctx context.Context, items []T, limit int, worker func(inde
 		}
 		once.Do(func() {
 			firstErr = err
+			stop()
 		})
 	}
 
 	for i := 0; i < limit; i++ {
 		wg.Go(func() {
 			for next := range jobs {
-				if err := ctx.Err(); err != nil {
+				if err := dispatch.Err(); err != nil {
 					recordErr(err)
 					continue
 				}
@@ -864,7 +938,7 @@ func mapLimit[T any](ctx context.Context, items []T, limit int, worker func(inde
 sendJobs:
 	for index, item := range items {
 		select {
-		case <-ctx.Done():
+		case <-dispatch.Done():
 			recordErr(ctx.Err())
 			break sendJobs
 		case jobs <- job{index: index, item: item}:

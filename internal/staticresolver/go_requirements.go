@@ -84,6 +84,9 @@ func requirementObservation(meta moduleMeta, identity graph.ModuleIdentity) grap
 func goRequirementIdentity(node graph.Node) (graph.ModuleIdentity, bool) {
 	name, version := node.Name, node.Version
 	if node.Replaced {
+		if node.LocalReplacement || isLocalReplacementTarget(node.Replacement) {
+			return graph.ModuleIdentity{}, false
+		}
 		at := strings.LastIndex(node.Replacement, "@")
 		if at < 1 {
 			return graph.ModuleIdentity{}, false

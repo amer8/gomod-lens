@@ -1,5 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { lookupVulnerabilities } from '../internal/app/web/static/analysis/vulnerabilities.js'
+import { lookupLicenses } from '../internal/app/web/static/analysis/licenses.js'
 import {
   publicJSON,
   publicText,
@@ -43,6 +45,22 @@ test('replacement lookups use resolved identities; local replacements stay unkno
     null,
   )
   assert.equal(publicIdentity({ name: 'original.org/lib' }), null)
+  for (const replacement of ['C:/local.dir/pkg@v1.0.0', '\\\\work.dir\\pkg@v1.0.0']) {
+    assert.equal(
+      publicIdentity({ name: 'example.org/lib', version: 'v1', replaced: true, replacement }),
+      null,
+    )
+  }
+  assert.equal(
+    publicIdentity({
+      name: 'example.org/lib',
+      version: 'v1',
+      replaced: true,
+      replacement: 'example.org/pkg@v1.0.0',
+      localReplacement: true,
+    }),
+    null,
+  )
 })
 test('text requests share bounded fetching but never confuse JSON cache entries', async () => {
   clearPublicCache()
@@ -72,6 +90,26 @@ test('text requests share bounded fetching but never confuse JSON cache entries'
     publicText(url + '/failed', { fetcher: async () => ({ ok: false, status: 503 }) }),
     /503/,
   )
+})
+
+test('local replacements produce unknown advisory and license results without a public request', async () => {
+  const node = {
+    id: 'local',
+    name: 'example.org/lib',
+    version: 'v1.0.0',
+    replaced: true,
+    replacement: 'C:/local.dir/pkg@v1.0.0',
+  }
+  const graph = { nodes: [node] }
+  let calls = 0
+  const fetcher = async () => {
+    calls++
+    return Response.json({})
+  }
+  for (const lookup of [lookupVulnerabilities, lookupLicenses]) {
+    assert.equal((await lookup(graph, { fetcher })).records.get('local').status, 'unknown')
+  }
+  assert.equal(calls, 0)
 })
 test('upstream failures stay unknown without discarding successful modules; concurrency is bounded', async () => {
   let running = 0,

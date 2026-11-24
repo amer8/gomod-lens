@@ -1,6 +1,7 @@
 // Committed WebLLM configuration snapshot (Apache-2.0); see docs/features/graph-assistant.md for maintenance.
 export const catalogInfo = Object.freeze({
   version: '0.2.89',
+  libraryBaseURL: 'https://raw.githubusercontent.com/mlc-ai/binary-mlc-llm-libs/5b7251f3bdce957be2a7bf73a6f6c560d9874df4/web-llm-models/v0_2_87/base/',
   source: 'https://raw.githubusercontent.com/mlc-ai/web-llm/v0.2.89/src/config.ts',
   checked: '2026-11-24',
   selection: 'tools/webllm-shortlist.json',
@@ -8,6 +9,8 @@ export const catalogInfo = Object.freeze({
 export const catalog = [
   {
     id: 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC',
+    library: 'Qwen2-1.5B-Instruct-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-jo5he7dldXq4ZVVwVGlnmIDpY22xDCGY0mqg89HujpA=',
     url: 'https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f32_1-MLC',
     gpuMB: 1888.97,
     contextTokens: 4096.0,
@@ -25,6 +28,8 @@ export const catalog = [
   },
   {
     id: 'Qwen2.5-0.5B-Instruct-q4f32_1-MLC',
+    library: 'Qwen2-0.5B-Instruct-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-a6i4+Fvi6G98oWRU0Zm/yD5nLsAQ9PbiZSQMIlBfWCk=',
     url: 'https://huggingface.co/mlc-ai/Qwen2.5-0.5B-Instruct-q4f32_1-MLC',
     gpuMB: 1060.2,
     contextTokens: 4096.0,
@@ -42,6 +47,8 @@ export const catalog = [
   },
   {
     id: 'Qwen3-0.6B-q4f32_1-MLC',
+    library: 'Qwen3-0.6B-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-YTxOjXlIzzVcAz6GGLeSXDHvNB/cbsOK77sQVAJLk/c=',
     url: 'https://huggingface.co/mlc-ai/Qwen3-0.6B-q4f32_1-MLC',
     gpuMB: 1924.98,
     contextTokens: 4096.0,
@@ -59,6 +66,8 @@ export const catalog = [
   },
   {
     id: 'Qwen3-1.7B-q4f32_1-MLC',
+    library: 'Qwen3-1.7B-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-VdJHmNvAC8OrigXrlPtIM9N2DG3pEfjyZMP24oIBT6s=',
     url: 'https://huggingface.co/mlc-ai/Qwen3-1.7B-q4f32_1-MLC',
     gpuMB: 2635.44,
     contextTokens: 4096.0,
@@ -76,6 +85,8 @@ export const catalog = [
   },
   {
     id: 'Qwen3.5-2B-q4f32_1-MLC',
+    library: 'Qwen3.5-2B-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-4+MXPXzx2X96vGzgF1mA5+HUmhW2jitr+jE4HgQjnGw=',
     url: 'https://huggingface.co/mlc-ai/Qwen3.5-2B-q4f32_1-MLC',
     gpuMB: 2591.55,
     contextTokens: 4096.0,
@@ -93,6 +104,8 @@ export const catalog = [
   },
   {
     id: 'Llama-3.2-3B-Instruct-q4f32_1-MLC',
+    library: 'Llama-3.2-3B-Instruct-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-fMW0n3C7j33ADXf067zd2EJTZbavYvwAxdocu5y48vQ=',
     url: 'https://huggingface.co/mlc-ai/Llama-3.2-3B-Instruct-q4f32_1-MLC',
     gpuMB: 2951.51,
     contextTokens: 4096.0,
@@ -110,6 +123,8 @@ export const catalog = [
   },
   {
     id: 'Phi-4-mini-instruct-q4f32_1-MLC',
+    library: 'Phi-4-mini-instruct-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-ucRSE2JiMw6XbgEV0QDcKE9co7bblV4uzTHE4Db63d4=',
     url: 'https://huggingface.co/mlc-ai/Phi-4-mini-instruct-q4f32_1-MLC',
     gpuMB: 4220.59,
     contextTokens: 4096.0,
@@ -127,6 +142,8 @@ export const catalog = [
   },
   {
     id: 'Qwen3-4B-q4f32_1-MLC',
+    library: 'Qwen3-4B-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-9tjGx1tQrtEYnzZGw6OKBt8W/gX0JT1/UaO8+TavSFk=',
     url: 'https://huggingface.co/mlc-ai/Qwen3-4B-q4f32_1-MLC',
     gpuMB: 4327.71,
     contextTokens: 4096.0,
@@ -144,6 +161,8 @@ export const catalog = [
   },
   {
     id: 'Hermes-3-Llama-3.1-8B-q4f32_1-MLC',
+    library: 'Llama-3_1-8B-Instruct-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-KrfRuiJixQlXxBnGbDnGW2aZ6jY2mVFpvA9UUckrCMA=',
     url: 'https://huggingface.co/mlc-ai/Hermes-3-Llama-3.1-8B-q4f32_1-MLC',
     gpuMB: 5779.27,
     contextTokens: 4096.0,
@@ -161,6 +180,8 @@ export const catalog = [
   },
   {
     id: 'Qwen3-8B-q4f32_1-MLC',
+    library: 'Qwen3-8B-q4f32_1_cs1k-webgpu.wasm',
+    libraryIntegrity: 'sha256-vYM+6ctE3iHohTkfKzglwI6uNbLf5lI5m9rh8bGRYyw=',
     url: 'https://huggingface.co/mlc-ai/Qwen3-8B-q4f32_1-MLC',
     gpuMB: 6852.55,
     contextTokens: 4096.0,

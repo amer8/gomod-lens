@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 
@@ -42,6 +44,9 @@ func (r *Resolver) releaseFreshnessForNode(ctx context.Context, node graph.Node)
 	if skipped != nil {
 		return *skipped, nil
 	}
+	if len(request.Version) > maxReleaseVersionBytes {
+		return graph.ReleaseFreshnessLookupError(request.Module, request.Version, errReleaseVersionTooLong), nil
+	}
 
 	release, err := r.latestRelease(ctx, request.Module)
 	if err != nil {
@@ -66,13 +71,50 @@ type releaseVersions struct {
 	retractions []modfile.VersionInterval
 }
 
-func (v releaseVersions) retracted(version string) bool {
-	for _, interval := range v.retractions {
-		if compareGoVersions(interval.Low, version) <= 0 && compareGoVersions(version, interval.High) <= 0 {
-			return true
+const (
+	maxReleaseListBytes    = 1 << 20
+	maxListedVersions      = 10000
+	maxRetractionIntervals = 4096
+	maxReleaseVersionBytes = 256
+)
+
+var errReleaseVersionTooLong = fmt.Errorf("release version exceeds the browser limit of %d bytes", maxReleaseVersionBytes)
+
+// Sorted disjoint intervals let all callers check a release in logarithmic time.
+func mergedRetractions(input []modfile.VersionInterval) ([]modfile.VersionInterval, error) {
+	if len(input) > maxRetractionIntervals {
+		return nil, errors.New("retraction history exceeds the browser size limit")
+	}
+	// Sorting, merging and lookup can each compare the same endpoint many times.
+	for _, interval := range input {
+		if len(interval.Low) > maxReleaseVersionBytes || len(interval.High) > maxReleaseVersionBytes {
+			return nil, errReleaseVersionTooLong
 		}
 	}
-	return false
+	intervals := slices.Clone(input)
+	slices.SortFunc(intervals, func(a, b modfile.VersionInterval) int {
+		return compareGoVersions(a.Low, b.Low)
+	})
+	merged := intervals[:0]
+	for _, next := range intervals {
+		if compareGoVersions(next.Low, next.High) > 0 {
+			continue
+		}
+		last := len(merged) - 1
+		if last < 0 || compareGoVersions(merged[last].High, next.Low) < 0 {
+			merged = append(merged, next)
+		} else if compareGoVersions(merged[last].High, next.High) < 0 {
+			merged[last].High = next.High
+		}
+	}
+	return merged, nil
+}
+
+func (v releaseVersions) retracted(version string) bool {
+	i := sort.Search(len(v.retractions), func(i int) bool {
+		return compareGoVersions(v.retractions[i].High, version) >= 0
+	})
+	return i < len(v.retractions) && compareGoVersions(v.retractions[i].Low, version) <= 0
 }
 
 // Both the root query and the lens use the highest release's go.mod for
@@ -90,6 +132,19 @@ func (r *Resolver) latestRelease(ctx context.Context, path string) (releaseVersi
 	if err != nil && !IsNotFound(err) {
 		return releaseVersions{}, err
 	}
+	if len(list) > maxReleaseListBytes {
+		return releaseVersions{}, errors.New("release history exceeds the browser size limit")
+	}
+	count := 0
+	for version := range strings.FieldsSeq(list) {
+		count++
+		if count > maxListedVersions {
+			return releaseVersions{}, errors.New("release history exceeds the browser size limit")
+		}
+		if len(version) > maxReleaseVersionBytes {
+			return releaseVersions{}, errReleaseVersionTooLong
+		}
+	}
 	listed := graph.LatestStableModuleVersion(list)
 	highest := listed
 	if highest == "" {
@@ -102,10 +157,17 @@ func (r *Resolver) latestRelease(ctx context.Context, path string) (releaseVersi
 	if err != nil {
 		return releaseVersions{}, err
 	}
-	release := releaseVersions{latest: highest, retractions: meta.Retractions}
+	intervals, err := mergedRetractions(meta.Retractions)
+	if err != nil {
+		return releaseVersions{}, err
+	}
+	release := releaseVersions{latest: highest, retractions: intervals}
 	if release.retracted(highest) {
 		var available []string
 		for version := range strings.FieldsSeq(list) {
+			if err := ctx.Err(); err != nil {
+				return releaseVersions{}, err
+			}
 			if !release.retracted(version) {
 				available = append(available, version)
 			}
@@ -133,6 +195,9 @@ func (r *Resolver) proxyLatest(ctx context.Context, base string) (string, error)
 		return "", err
 	}
 	version := strings.TrimSpace(info.Version)
+	if len(version) > maxReleaseVersionBytes {
+		return "", errReleaseVersionTooLong
+	}
 	if parseGoVersion(version) == nil {
 		return "", fmt.Errorf("invalid version from %s/@latest", base)
 	}

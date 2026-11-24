@@ -34,12 +34,13 @@ export async function loadGoRequirements(nodes, { signal, refresh = false, onPro
   signal?.throwIfAborted()
   await ensureRuntime()
   signal?.throwIfAborted()
-  const identities = nodes.map(({ id, name, version, replaced, replacement }) => ({
+  const identities = nodes.map(({ id, name, version, replaced, replacement, localReplacement }) => ({
     id,
     name,
     version,
     replaced,
     replacement,
+    localReplacement,
   }))
   const payload = await withAbort(
     window.gomodLensLoadGoRequirements(JSON.stringify(identities), { signal, refresh, onProgress }),

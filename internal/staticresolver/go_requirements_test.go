@@ -75,6 +75,26 @@ func TestGraphReusesExactVersionModuleMetadata(t *testing.T) {
 	}
 }
 
+func TestFilesystemReplacementStaysLocalInGraphAndLookups(t *testing.T) {
+	files := &requirementFetcher{calls: make(map[string]int), files: fakeFetcher{
+		proxyModuleURL("example.org/root") + "/@v/v1.0.0.mod": "module example.org/root\nrequire example.org/lib v1.0.0\nreplace example.org/lib => C:/local.dir/pkg@v1.0.0\n",
+	}}
+	r := New(files)
+	result, err := r.ResolveGraph(context.Background(), "example.org/root@v1.0.0", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep := nodeByID(result.Nodes, "example.org/lib@v1.0.0")
+	if dep == nil || !dep.LocalReplacement || dep.GoRequirement != nil {
+		t.Fatalf("unexpected replacement: %+v", dep)
+	}
+	before := len(files.calls)
+	got, err := r.LookupGoRequirements(context.Background(), []graph.Node{*dep}, nil)
+	if err != nil || got.Records[dep.ID].Status != "unknown" || len(files.calls) != before {
+		t.Fatalf("unexpected local lookup: %+v, %v", got, err)
+	}
+}
+
 func TestRequirementsLookupDeduplicatesResolvedIdentitiesAndPreservesUnknowns(t *testing.T) {
 	fetcher := &requirementFetcher{calls: make(map[string]int), files: fakeFetcher{
 		proxyModuleURL("example.org/fork") + "/@v/v1.2.0.mod": "module example.org/original\n",

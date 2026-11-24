@@ -3,6 +3,28 @@ const versionPattern =
 
 /** @typedef {{versions: string[], latest: string, partial: boolean}} VersionResults */
 
+/** @param {Response} response */
+async function readVersionList(response) {
+  if (!response.body) return []
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let bytes = 0
+  let text = ''
+  for (;;) {
+    const { value, done } = await reader.read()
+    if (done) break
+    bytes += value.byteLength
+    if (bytes > 1024 * 1024) {
+      await reader.cancel()
+      throw new Error('Release history exceeds the browser size limit')
+    }
+    text += decoder.decode(value, { stream: true })
+  }
+  const entries = (text + decoder.decode()).trim().split(/\s+/, 10001)
+  if (entries.length > 10000) throw new Error('Release history exceeds the browser size limit')
+  return entries.filter((version) => versionPattern.test(version))
+}
+
 /** @param {string} a @param {string} b */
 export function compareVersions(a, b) {
   const x = versionPattern.exec(a),
@@ -59,19 +81,13 @@ export async function fetchModuleVersions(
     return response
   }
   const [list, info] = await Promise.allSettled([
-    get('/@v/list').then((response) => response.text()),
+    get('/@v/list').then(readVersionList),
     knownLatest === undefined
       ? get('/@latest').then(async (response) => /** @type {unknown} */ (await response.json()))
       : { Version: knownLatest },
   ])
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-  const listed =
-    list.status === 'fulfilled'
-      ? list.value
-          .trim()
-          .split(/\s+/)
-          .filter((v) => versionPattern.test(v))
-      : []
+  const listed = list.status === 'fulfilled' ? list.value : []
   const latestValue =
     info.status === 'fulfilled' &&
     info.value &&

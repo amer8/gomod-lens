@@ -362,6 +362,21 @@ test('built-in lens validation accepts canonical results including a zero Scorec
   assert.equal(app.ids.get('graph-errors').hidden, true)
 })
 
+test('autocomplete accepts public search terms and skips URLs and local paths before dispatch', (t) => {
+  const app = fixture(t)
+  for (const input of ['https://name:example@git.example/repo', 'ssh://git@example.org/repo',
+    'C:/work/repo', '\\\\server\\repo', '~/work/repo', '../repo', 'https%3A%2F%2Fexample.org']) {
+    app.input(input)
+    app.tick()
+  }
+  assert.equal(app.searchRequests.length, 0)
+  for (const input of ['owner/repo@main', 'library name', 'repo@v1.2.3']) {
+    app.input(input)
+    app.tick()
+  }
+  assert.equal(app.searchRequests.length, 3)
+})
+
 test('suggestions reject late results even when the text repeats and keyboard selection loads the module', async (t) => {
   const app = fixture(t)
   for (const query of ['first', 'second', 'first']) {

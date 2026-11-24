@@ -5,6 +5,25 @@ export { catalogInfo }
 export const defaultModelID = 'Qwen2.5-1.5B-Instruct-q4f32_1-MLC'
 export const runtimeURL = new URL(`../vendor/web-llm-${catalogInfo.version}.js`, import.meta.url)
   .href
+
+/** @typedef {{model_id: string, integrity?: Record<string, unknown>}} RuntimeModel */
+/** @typedef {{model_list: RuntimeModel[], cacheBackend?: string}} ModelConfig */
+/** @param {ModelConfig} defaults */
+export function pinnedModelConfig(defaults) {
+  return {
+    ...defaults,
+    model_list: catalog.map((model) => {
+      const record = defaults.model_list.find((item) => item.model_id === model.id)
+      if (!record || !model.library || !model.libraryIntegrity)
+        throw new Error('Missing pinned library for ' + model.id)
+      return {
+        ...record,
+        model_lib: catalogInfo.libraryBaseURL + model.library,
+        integrity: { ...record.integrity, model_lib: model.libraryIntegrity, onFailure: 'error' },
+      }
+    }),
+  }
+}
 const collator = new Intl.Collator('en', { numeric: true, sensitivity: 'base' })
 /** @param {number | null | undefined} bytes */
 const weightSize = (bytes) =>

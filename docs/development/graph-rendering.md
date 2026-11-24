@@ -101,9 +101,8 @@ output. A saved run can be replayed with
 `--fixture=/absolute/path/to/saved-run.json` without upstream API requests.
 
 The runner serves `internal/app/web/static/`, `dist/` and benchmark files over localhost and
-closes the browser/server afterward. Output defaults to
-`/private/tmp/gomod-lens-webgpu-benchmark.json`; set `BENCHMARK_OUTPUT` to retain
-a run elsewhere. The full run and `--verify` compare the 1,500-node synthetic graph with
+closes the browser/server afterward. Each run saves its screenshots and JSON in a new private temporary directory
+and prints the JSON path. Set `BENCHMARK_OUTPUT` to choose a different JSON destination. The full run and `--verify` compare the 1,500-node synthetic graph with
 the reference in `verify.mjs`. On an Apple M4 Pro with Chrome 158 at 1280×800
 and device pixel ratio 2, 300 layout steps took 682.7 ms. The median of three
 draw p95 measurements was 4.7 ms for Canvas and 1.1 ms for WebGPU. On matching

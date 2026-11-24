@@ -1,3 +1,4 @@
+import { prebuiltAppConfig } from '../internal/app/web/static/vendor/web-llm-0.2.89.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { models } from '../internal/app/web/static/assistant/models.js'
@@ -115,7 +116,14 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
     '../internal/app/web/static/assistant/worker.js?generation-test'
   )
   const runtime = {
+    prebuiltAppConfig,
     CreateMLCEngine(id, options) {
+      assert.equal(options.appConfig.model_list.length, models.length)
+      for (const entry of options.appConfig.model_list) {
+        assert.match(entry.model_lib, /\/binary-mlc-llm-libs\/[0-9a-f]{40}\/.*\.wasm$/)
+        assert.match(entry.integrity.model_lib, /^sha256-[A-Za-z0-9+/]{43}=$/)
+        assert.equal(entry.integrity.onFailure, 'error')
+      }
       options.initProgressCallback({ text: 'Loading weights', progress: 0.42, timeElapsed: 2 })
       return engine
     },
@@ -292,6 +300,7 @@ test('interrupting a planner skips its retry and keeps the next generation on th
     '../internal/app/web/static/assistant/worker.js?interrupt-test'
   )
   await handleRequest({ data: { id: 1, type: 'init', modelID: qwen25 } }, async () => ({
+    prebuiltAppConfig,
     CreateMLCEngine: () => engine,
   }))
   const dispatch = (data) => handleRequest({ data })

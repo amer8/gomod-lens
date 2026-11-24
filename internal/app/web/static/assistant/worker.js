@@ -1,5 +1,5 @@
 import { generationOptions, AnswerStream, finalAnswer } from './generation.js'
-import { models, findModel, catalogInfo, runtimeURL } from './models.js'
+import { models, findModel, catalogInfo, runtimeURL, pinnedModelConfig } from './models.js'
 import { chatMessages, planningInstructions, answerInstructions } from './prompts.js'
 import { checkCases, checkSuiteVersion } from './model-checks.js'
 
@@ -19,7 +19,8 @@ import { checkCases, checkSuiteVersion } from './model-checks.js'
 /** @typedef {(request: StructuredRequest) => Promise<Completion>} StructuredCompletion */
 /** @typedef {{interruptGenerate(): void, chat: {completions: {create: StreamCompletion & StructuredCompletion}}}} Engine */
 /** @typedef {{text?: string, progress?: number, timeElapsed?: number}} InitProgress */
-/** @typedef {{hasModelInCache(id: string): Promise<boolean>, CreateMLCEngine(id: string, options: {initProgressCallback: (report: InitProgress) => void}): Promise<Engine>}} Runtime */
+/** @typedef {import('./models.js').ModelConfig} ModelConfig */
+/** @typedef {{prebuiltAppConfig: ModelConfig, hasModelInCache(id: string, appConfig: ModelConfig): Promise<boolean>, CreateMLCEngine(id: string, options: {appConfig: ModelConfig, initProgressCallback: (report: InitProgress) => void}): Promise<Engine>}} Runtime */
 /** @typedef {{onmessage: ((event: MessageEvent<WorkerRequest>) => void) | null, postMessage: (message: unknown) => void}} WorkerScope */
 const worker = /** @type {WorkerScope} */ (/** @type {unknown} */ (self))
 /** @type {Engine | null} */
@@ -191,7 +192,8 @@ export async function handleRequest({ data }, loadRuntime = () => import(runtime
       return
     }
     if (data.type === 'cache') {
-      const { hasModelInCache } = await loadRuntime()
+      const { hasModelInCache, prebuiltAppConfig } = await loadRuntime()
+      const appConfig = pinnedModelConfig(prebuiltAppConfig)
       /** @type {{id: string, cached: boolean | null}[]} */
       const records = []
       let next = 0
@@ -200,7 +202,7 @@ export async function handleRequest({ data }, loadRuntime = () => import(runtime
           while (next < models.length) {
             const model = models[next++]
             try {
-              records.push({ id: model.id, cached: await hasModelInCache(model.id) })
+              records.push({ id: model.id, cached: await hasModelInCache(model.id, appConfig) })
             } catch {
               records.push({ id: model.id, cached: null })
             }
@@ -211,9 +213,10 @@ export async function handleRequest({ data }, loadRuntime = () => import(runtime
     } else if (data.type === 'init') {
       if (!findModel(data.modelID)) throw new Error('Unsupported local model.')
       worker.postMessage({ type: 'progress', text: 'Loading the WebLLM runtime…' })
-      const { CreateMLCEngine } = await loadRuntime()
+      const { CreateMLCEngine, prebuiltAppConfig } = await loadRuntime()
       worker.postMessage({ type: 'progress', text: 'Preparing GPU and model files…' })
       engine = await CreateMLCEngine(data.modelID, {
+        appConfig: pinnedModelConfig(prebuiltAppConfig),
         initProgressCallback: (report) =>
           worker.postMessage({
             type: 'progress',

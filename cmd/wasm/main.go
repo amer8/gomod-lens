@@ -156,6 +156,9 @@ func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.Fe
 	}
 	if !f.refresh {
 		if body, ok := cachedResponse(ctx, request.URL); ok {
+			if request.MaxBytes > 0 && len(body) > request.MaxBytes {
+				return "", errors.New("cached response exceeds the browser size limit")
+			}
 			return body, nil
 		}
 	}
@@ -197,13 +200,45 @@ func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.Fe
 		}
 	}
 
-	text, err := awaitPromise(ctx, response.Call("text"))
+	body, err := readResponseText(ctx, response, request.MaxBytes)
 	if err != nil {
 		return "", err
 	}
-	body := text.String()
 	storeCachedResponse(ctx, request.URL, body)
 	return body, nil
+}
+
+func readResponseText(ctx context.Context, response js.Value, limit int) (string, error) {
+	if limit <= 0 {
+		text, err := awaitPromise(ctx, response.Call("text"))
+		if err != nil {
+			return "", err
+		}
+		return text.String(), nil
+	}
+	if !response.Get("body").Truthy() {
+		return "", nil
+	}
+	reader := response.Get("body").Call("getReader")
+	var body []byte
+	for {
+		chunk, err := awaitPromise(ctx, reader.Call("read"))
+		if err != nil {
+			return "", err
+		}
+		if chunk.Get("done").Bool() {
+			return strings.TrimPrefix(string(body), "\uFEFF"), nil
+		}
+		value := chunk.Get("value")
+		size := value.Get("byteLength").Int()
+		if size > limit-len(body) {
+			_, _ = awaitPromise(ctx, reader.Call("cancel"))
+			return "", errors.New("upstream response exceeds the browser size limit")
+		}
+		start := len(body)
+		body = append(body, make([]byte, size)...)
+		js.CopyBytesToGo(body[start:], value)
+	}
 }
 
 type promiseResult struct {

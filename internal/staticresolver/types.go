@@ -10,8 +10,9 @@ import (
 
 // FetchRequest describes one upstream text request made by the static resolver.
 type FetchRequest struct {
-	URL    string
-	Accept string
+	URL      string
+	Accept   string
+	MaxBytes int // Zero leaves the response unrestricted.
 }
 
 // Fetcher retrieves text resources for static module resolution.

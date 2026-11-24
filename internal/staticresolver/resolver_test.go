@@ -2,10 +2,13 @@ package staticresolver
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"testing"
+
+	"golang.org/x/mod/modfile"
 
 	"github.com/amer8/gomod-lens/internal/graph"
 )
@@ -81,10 +84,14 @@ func TestResolveGraphBuildsBrowserGraph(t *testing.T) {
 }
 
 func TestResolveGraphUsesDeclaredRootModulePath(t *testing.T) {
+	const origin = `{"Version":"v1.98.2","Origin":{"VCS":"git","URL":"https://github.com/tailscale/tailscale","Hash":"abc123"}}`
 	fetcher := fakeFetcher{
-		proxyModuleURL("github.com/tailscale/tailscale") + "/@latest":        `{"Version":"v1.98.2"}`,
-		proxyModuleURL("github.com/tailscale/tailscale") + "/@v/v1.98.2.mod": "module tailscale.com\n\nrequire golang.org/x/sys v0.37.0\n",
-		proxyModuleURL("golang.org/x/sys") + "/@v/v0.37.0.mod":               "module golang.org/x/sys\n",
+		proxyModuleURL("github.com/tailscale/tailscale") + "/@v/v1.98.2.info": origin,
+		proxyModuleURL("tailscale.com") + "/@v/v1.98.2.info":                  origin,
+		proxyModuleURL("tailscale.com") + "/@v/v1.98.2.mod":                   "module tailscale.com\n\nrequire golang.org/x/sys v0.37.0\n",
+		proxyModuleURL("github.com/tailscale/tailscale") + "/@latest":         `{"Version":"v1.98.2"}`,
+		proxyModuleURL("github.com/tailscale/tailscale") + "/@v/v1.98.2.mod":  "module tailscale.com\n\nrequire golang.org/x/sys v0.37.0\n",
+		proxyModuleURL("golang.org/x/sys") + "/@v/v0.37.0.mod":                "module golang.org/x/sys\n",
 	}
 	resolver := New(fetcher)
 
@@ -95,14 +102,38 @@ func TestResolveGraphUsesDeclaredRootModulePath(t *testing.T) {
 	if result.RootID != "tailscale.com@v1.98.2" {
 		t.Fatalf("root ID = %q, want declared module path", result.RootID)
 	}
-	if result.Meta.Target != "tailscale.com" {
-		t.Fatalf("target = %q, want declared module path", result.Meta.Target)
+	if result.Meta.Target != result.RootID {
+		t.Fatalf("target = %q, want verified module version", result.Meta.Target)
 	}
-	if root := nodeByID(result.Nodes, "tailscale.com@v1.98.2"); root == nil || !root.Root {
+	if root := nodeByID(result.Nodes, "tailscale.com@v1.98.2"); root == nil || !root.Root ||
+		root.GoRequirement.Source != proxyModuleURL("tailscale.com")+"/@v/v1.98.2.mod" {
 		t.Fatalf("declared root node = %#v, want root node", root)
 	}
 	if dep := nodeByID(result.Nodes, "golang.org/x/sys@v0.37.0"); dep == nil || !dep.Direct {
 		t.Fatalf("direct dependency = %#v, want direct node", dep)
+	}
+}
+
+func TestRootKeepsFetchedIdentityWithoutMatchingSource(t *testing.T) {
+	const requested = "example.org/fork"
+	const declared = "example.org/original"
+	const version = "v1.0.0"
+	const info = `{"Version":"v1.0.0","Origin":{"URL":"https://example.org/fork","VCS":"git","Hash":"abc123","Subdir":"lib"}}`
+	for _, other := range []string{"{}", strings.Replace(info, "abc123", "abc124", 1),
+		strings.Replace(info, "/fork", "/original", 1), strings.Replace(info, "lib", "other", 1)} {
+		files := fakeFetcher{
+			proxyModuleURL(requested) + "/@v/v1.0.0.info": info,
+			proxyModuleURL(declared) + "/@v/v1.0.0.info":  other,
+			proxyModuleURL(requested) + "/@v/v1.0.0.mod":  "module " + declared + "\n",
+		}
+		result, err := New(files).ResolveGraph(context.Background(), requested+"@"+version, Options{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		root := result.Nodes[0]
+		if root.Name != requested || result.Meta.Target != requested+"@"+version || root.GoRequirement.Source != proxyModuleURL(requested)+"/@v/v1.0.0.mod" {
+			t.Fatalf("unverified root identity: %+v", root)
+		}
 	}
 }
 
@@ -135,6 +166,120 @@ func TestResolveGraphAllowsLargeBrowserGraph(t *testing.T) {
 	if result.Meta.EdgeCount != depCount {
 		t.Fatalf("edge count = %d, want %d", result.Meta.EdgeCount, depCount)
 	}
+}
+
+func TestSearchSkipsURLsAndLocalPaths(t *testing.T) {
+	fetcher := &requirementFetcher{calls: make(map[string]int)}
+	resolver := New(fetcher)
+	for _, input := range []string{"https://name:example@git.example/repo", "ssh://git@example.org/repo", "C:/work/repo", `\\server\repo`, "~/work/repo", "https%3A%2F%2Fexample.org"} {
+		results, err := resolver.SearchModules(context.Background(), input, 1)
+		if err != nil || len(results) != 0 || len(fetcher.calls) != 0 {
+			t.Fatalf("unsupported search reached the fetcher: %q", input)
+		}
+	}
+	for _, input := range []string{"owner/repo@main", "owner/repo@v1.2.3"} {
+		if got := NormalizeModuleSearchQuery(input); got != "owner/repo" {
+			t.Fatalf("%q normalized to %q", input, got)
+		}
+	}
+}
+
+func TestResolutionBudgets(t *testing.T) {
+	ctx := context.Background()
+	root := moduleRef{Path: "example.org/root", Version: "v1.0.0", ID: "example.org/root@v1.0.0"}
+	dep := requirement{Path: "example.org/dep", Version: "v1.0.0"}
+	second := requirement{Path: dep.Path, Version: "v1.1.0"}
+	files := &requirementFetcher{calls: make(map[string]int), files: fakeFetcher{
+		proxyModuleURL(dep.Path) + "/@v/v1.0.0.mod": "module example.org/dep\n",
+	}}
+	resolver := New(files)
+	budget := resolutionBudget{versions: 1, requirements: 4}
+	if _, err := resolver.resolveRequirements(ctx, root, moduleMeta{}, []requirement{dep, dep}, nil, nil, newProgressReporter(nil), &budget); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := resolver.resolveRequirements(ctx, root, moduleMeta{}, []requirement{second}, nil, nil, newProgressReporter(nil), &budget); err == nil || len(files.calls) != 1 {
+		t.Fatalf("version budget did not stop further fetching: %v", err)
+	}
+	budget = resolutionBudget{versions: 2, requirements: 1}
+	if _, err := resolver.resolveRequirements(ctx, root, moduleMeta{}, []requirement{dep, second}, nil, nil, newProgressReporter(nil), &budget); err == nil {
+		t.Fatal("requirement visit limit was ignored")
+	}
+	fetch := &graphFetcher{Fetcher: fakeFetcher{"a.mod": "1234", "b.mod": "567"}, remaining: 6}
+	if _, err := fetch.FetchText(ctx, FetchRequest{URL: "a.mod"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fetch.FetchText(ctx, FetchRequest{URL: "b.mod"}); err == nil {
+		t.Fatal("aggregate byte limit was ignored")
+	}
+}
+
+func TestRetractionIndexPreservesInclusiveBoundaries(t *testing.T) {
+	input := []modfile.VersionInterval{
+		{Low: "v1.4.0", High: "v1.6.0"}, {Low: "v1.2.0", High: "v1.5.0"},
+		{Low: "v1.9.0", High: "v1.9.0"}, {Low: "v1.2.0", High: "v1.3.0"},
+	}
+	intervals, err := mergedRetractions(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	release := releaseVersions{retractions: intervals}
+	if len(release.retractions) != 2 || input[0].Low != "v1.4.0" {
+		t.Fatal("unexpected interval merge")
+	}
+	for version, want := range map[string]bool{"v1.1.0": false, "v1.2.0": true, "v1.4.0": true, "v1.6.0": true, "v1.7.0": false, "v1.9.0": true} {
+		if release.retracted(version) != want {
+			t.Errorf("incorrect retraction status for %s", version)
+		}
+	}
+}
+
+func TestReleaseRetractionVersionLimits(t *testing.T) {
+	const path = "example.org/root"
+	const prefix = "v1.1."
+	atLimit := prefix + strings.Repeat("1", maxReleaseVersionBytes-len(prefix))
+	overLimit := atLimit + "1"
+	base := proxyModuleURL(path)
+	for _, tc := range []struct {
+		name, list, latest, directive string
+	}{
+		{"low endpoint", "v1.0.0", "", "retract [" + overLimit + ", v1.2.0]"},
+		{"high endpoint", "v1.0.0", "", "retract [v1.0.0, " + overLimit + "]"},
+		{"single version", "v1.0.0", "", "retract " + overLimit},
+		{"listed version", "v1.0.0\n" + overLimit, "", ""},
+		{"proxy latest", "", overLimit, ""},
+		{"fallback after self-retraction", "v1.0.0", overLimit, "retract v1.0.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := New(fakeFetcher{
+				base + "/@v/list":       tc.list,
+				base + "/@latest":       fmt.Sprintf(`{"Version":%q}`, tc.latest),
+				base + "/@v/v1.0.0.mod": "module " + path + "\n" + tc.directive + "\n",
+			})
+			got, err := resolver.resolveLatestVersion(t.Context(), path)
+			if got != "" || !errors.Is(err, errReleaseVersionTooLong) {
+				t.Fatalf("got latest %q, error %v, want version size error", got, err)
+			}
+		})
+	}
+	t.Run("inclusive endpoint at limit", func(t *testing.T) {
+		resolver := New(fakeFetcher{
+			base + "/@v/list":                "v1.0.0\n" + atLimit,
+			base + "/@v/" + atLimit + ".mod": "module " + path + "\nretract [v1.1.0, " + atLimit + "]\n",
+		})
+		if got, err := resolver.resolveLatestVersion(t.Context(), path); err != nil || got != "v1.0.0" {
+			t.Fatalf("got latest %q, error %v, want v1.0.0", got, err)
+		}
+	})
+	t.Run("pinned node", func(t *testing.T) {
+		resolver := New(fetchFunc(func(context.Context, FetchRequest) (string, error) {
+			t.Fatal("oversized node version should be rejected before fetching release metadata")
+			return "", nil
+		}))
+		info, err := resolver.releaseFreshnessForNode(t.Context(), graph.Node{Name: path, Version: overLimit})
+		if err != nil || info.Status != graph.ReleaseFreshnessStatusError || info.Message != errReleaseVersionTooLong.Error() {
+			t.Fatalf("got status %q, message %q, error %v", info.Status, info.Message, err)
+		}
+	})
 }
 
 func TestParseGoModHandlesReplacementAndIndirectComment(t *testing.T) {

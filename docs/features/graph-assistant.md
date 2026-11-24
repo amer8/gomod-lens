@@ -150,6 +150,9 @@ scroll independently so Load/Cancel stays accessible in the 40% dock.
 the app; no generation step is required. To update it, verify the selected IDs
 against the official WebLLM configuration linked in `catalogInfo.source`, then
 update the records using their MLC chat templates and weight-file metadata.
+For each executable model library, record the immutable upstream commit in
+`catalogInfo.libraryBaseURL`, the matching filename, and its SHA-256 SRI digest.
+The worker checks this digest on downloads and cache hits before instantiation.
 Edit the canonical catalog, rebuild with `make wasm`, and update `catalogInfo.version`,
 `source` and `checked` together when changing the pinned runtime.
 `tools/webllm-shortlist.json` defines the ten exact IDs, selection notes and

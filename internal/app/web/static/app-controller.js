@@ -502,7 +502,8 @@ export function createApplication({
 
   /** @param {string} target */
   function normalizeModuleSearchQuery(target) {
-    return (target || '').trim().split('@')[0].trim()
+    const match = /^([A-Za-z0-9_-][A-Za-z0-9._~/-]*(?: [A-Za-z0-9_-]+)*)(?:@(?:[A-Za-z0-9_/-]*|v[0-9][A-Za-z0-9.+-]*))?$/.exec(target.trim())
+    return match?.[1] || ''
   }
 
   /** @param {string} query */
@@ -521,6 +522,9 @@ export function createApplication({
       target.startsWith('./') ||
       target.startsWith('../') ||
       target.startsWith('/') ||
+      target.startsWith('~') ||
+      target.includes('\\') ||
+      /^[a-z]:/i.test(target) ||
       target.endsWith('.mod')
     )
   }

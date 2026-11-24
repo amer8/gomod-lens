@@ -1,3 +1,4 @@
+import { prebuiltAppConfig } from '../internal/app/web/static/vendor/web-llm-0.2.89.js'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { models, findModel, catalogInfo } from '../internal/app/web/static/assistant/models.js'
@@ -157,7 +158,7 @@ test('worker app checks run production inference and retain failed cases without
   const { handleRequest } = await import(
     '../internal/app/web/static/assistant/worker.js?profiles-test'
   )
-  const handler = (event) => handleRequest(event, async () => ({ CreateMLCEngine: () => engine }))
+  const handler = (event) => handleRequest(event, async () => ({ prebuiltAppConfig, CreateMLCEngine: () => engine }))
   await handler({ data: { id: 1, type: 'init', modelID: qwen } })
   await handler({ data: { id: 2, type: 'validate' } })
   const result = checkedReport(
