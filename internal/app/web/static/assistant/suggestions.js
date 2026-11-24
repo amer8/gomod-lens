@@ -22,7 +22,7 @@ export function suggestionKey(topic, nodeID, filter) {
 export function evidenceGaps(graph, evidence = {}) {
   return graph.nodes.filter(
     (node) =>
-      freshnessRecord(node).status === 'unknown' ||
+      ['unknown', 'error'].includes(freshnessRecord(node).status) ||
       node.lenses?.openssf?.status !== 'found' ||
       (evidence.vulnerabilities &&
         !['matched', 'clear'].includes(
@@ -265,7 +265,8 @@ export function suggestedQuestions(
     (vulnerabilityUnknown.length ||
       nodes.some(
         (node) =>
-          freshnessRecord(node).status === 'unknown' || node.lenses?.openssf?.status !== 'found',
+          ['unknown', 'error'].includes(freshnessRecord(node).status) ||
+          node.lenses?.openssf?.status !== 'found',
       ))
   )
     add(

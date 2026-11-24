@@ -30,7 +30,7 @@ The build copies the Go license from the same toolchain that supplies
 `wasm_exec.js` and compiles the WASM binary, replacing the reference text in
 the deployment with that toolchain's exact license.
 
-The license texts are reproduced from the [WebLLM v0.2.86 license](https://github.com/mlc-ai/web-llm/blob/v0.2.86/LICENSE),
+The license texts are reproduced from the [WebLLM v0.2.89 license](https://github.com/mlc-ai/web-llm/blob/v0.2.89/LICENSE),
 [CDLA release](https://github.com/Community-Data-License-Agreements/Releases/blob/main/CDLA-Permissive-2.0.txt),
 [Go vulnerability database license](https://github.com/golang/vulndb/blob/master/LICENSE),
 [Meta's Llama 3.1 materials](https://github.com/meta-llama/llama-models/tree/main/models/llama3_1),
@@ -68,8 +68,8 @@ uses these same runtime files and adds no graph dependencies.
 
 | Component | Version | License | Use |
 | --- | --- | --- | --- |
-| [WebLLM](https://github.com/mlc-ai/web-llm) | `0.2.86` | Apache-2.0 | The app serves the verified npm JavaScript bundle from its own origin for model cache inspection and local inference |
-| [WebLLM model catalog](https://github.com/mlc-ai/web-llm/blob/v0.2.86/src/config.ts) | `0.2.86` selected language-model variants | Catalog configuration: Apache-2.0; individual weights have their respective upstream licenses | Metadata snapshot in `assistant/model-catalog.js`; weights load only on explicit selection. Each choice links its upstream model card and license |
+| [WebLLM](https://github.com/mlc-ai/web-llm) | `0.2.89` | Apache-2.0 | The app serves the verified npm JavaScript bundle from its own origin for model cache inspection and local inference |
+| [WebLLM model catalog](https://github.com/mlc-ai/web-llm/blob/v0.2.89/src/config.ts) | `0.2.89` selected language-model variants | Catalog configuration: Apache-2.0; individual weights have their respective upstream licenses | Metadata snapshot in `assistant/model-catalog.js`; weights load only on explicit selection. Each choice links its upstream model card and license |
 
 The recommended default is [Qwen2.5-1.5B-Instruct](https://huggingface.co/mlc-ai/Qwen2.5-1.5B-Instruct-q4f32_1-MLC)
 (Apache-2.0). Other selected weights include models under Llama community license terms

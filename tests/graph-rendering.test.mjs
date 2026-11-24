@@ -34,8 +34,11 @@ test('graph snapshots deduplicate edges, reject missing endpoints and safely sto
   const model = createGraphModel(data)
   assert.equal(model.graph.getNodesCount(), 6)
   assert.equal(model.links.length, 6)
-  assert.equal(model.graph.getLinks('__proto__').size, 1)
-  assert.equal(model.graph.getLink('__proto__', '__proto__').id, 5)
+  assert.equal(model.graph.getLinks('__proto__').length, 1)
+  assert.equal(
+    model.graph.getNode('__proto__').links[0],
+    model.graph.getLink('__proto__', '__proto__'),
+  )
   assert.equal(model.graph.getLink('root', 'a').source.id, 'root')
 })
 
@@ -46,7 +49,8 @@ test('selection highlights the root path and neighbors; lens group requests pres
   assert.equal(alpha(model, 'c'), 1)
   assert(alpha(model, 'b') < 0.3)
   assert(alpha(model, 'isolated') < 0.3)
-  model.highlight({ ids: ['a', 'c'], nodesOnly: true })
+  model.highlight({ ids: ['a', 'c'], nodesOnly: true, color: '#123456' })
+  assert.equal(model.byID.get('a').color, '#123456')
   assert.equal(alpha(model, 'a'), 1)
   assert(alpha(model, 'root') < 0.3)
   assert(model.links.every((link) => model.edgeData[link.index * 12 + 11] < 0.13))
@@ -56,6 +60,10 @@ test('selection highlights the root path and neighbors; lens group requests pres
   assert.equal(alpha(model, 'isolated'), 1)
   assert(alpha(model, 'a') < 0.3)
   model.select('')
+  assert.equal(model.byID.get('a').color, '#6ed0b3')
+  assert(model.nodes.every((node) => alpha(model, node.id) === 1))
+  model.highlight({ ids: ['stale-node'], color: '#123456' })
+  assert.equal(model.byID.get('a').color, '#6ed0b3')
   assert(model.nodes.every((node) => alpha(model, node.id) === 1))
   model.select('stale-node')
   assert(model.nodes.every((node) => alpha(model, node.id) === 1))

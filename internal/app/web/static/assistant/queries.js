@@ -1,3 +1,5 @@
+import { topicIDs, topics } from './topics.js'
+export { topicIDs, topics } from './topics.js'
 import { suggestedQuestions, evidenceGaps } from './suggestions.js'
 export { suggestionKey } from './suggestions.js'
 import { browserLenses } from '../analysis/registry.js'
@@ -11,29 +13,6 @@ import {
   reachableIDs as reachable,
 } from '../graph-traversal.js'
 
-// Queries and follow-ups are an allowlist. Neither natural language nor model
-// output can execute code, invent graph actions, or change a module version.
-/** @type {Record<string, string>} */
-export const topics = {
-  attention: 'Which dependencies deserve attention first?',
-  advisories: 'Which modules have known advisory matches?',
-  introducers: 'Which direct dependencies introduce advisory matches?',
-  updates: 'Which modules are behind an observed release?',
-  'direct-updates': 'Which direct dependencies have newer observed releases?',
-  'major-updates': 'Which updates cross a major version?',
-  unknown: 'Where are we missing evidence?',
-  paths: 'How is the selected module connected to the root?',
-  selected: 'What do we know about the selected module?',
-  licenses: 'What license evidence is available?',
-  'license-review': 'Which modules have multiple license expressions?',
-  'license-gaps': 'Which modules lack usable license evidence?',
-  scorecard: 'Which repository checks need investigation?',
-  fixes: 'Which advisories mention fixed versions?',
-  reachability: 'Can this graph establish vulnerability reachability?',
-  overview: 'How is this dependency graph structured?',
-  lenses: 'Which analysis lenses are available?',
-}
-export const topicIDs = Object.keys(topics)
 /** @param {string} topic @param {import('../../assistant-types').Context} context */
 export function questionLabel(topic, context) {
   const node = context.graph?.nodes.find((n) => n.id === context.selected)
@@ -198,7 +177,9 @@ export function answerQuestion(topic, context, evidence = {}, { licenseQuery = n
         isBehind(node) &&
         (topic !== 'major-updates' || freshnessRecord(node).status === 'major_behind'),
     )
-    const unknown = candidates.filter((node) => freshnessRecord(node).status === 'unknown')
+    const unknown = candidates.filter((node) =>
+      ['unknown', 'error'].includes(freshnessRecord(node).status),
+    )
     result.paragraphs.push(
       topic === 'major-updates'
         ? `${behind.length} modules have an observed major-version release gap. ${unknown.length} modules have unknown release status.`
@@ -461,7 +442,9 @@ export function answerQuestion(topic, context, evidence = {}, { licenseQuery = n
       : 'A repository score is not a security verdict for a released module.'
     show('Open repository checks', [selected.id], 'openssf')
   } else if (topic === 'unknown') {
-    const releaseUnknown = graph.nodes.filter((node) => freshnessRecord(node).status === 'unknown')
+    const releaseUnknown = graph.nodes.filter((node) =>
+      ['unknown', 'error'].includes(freshnessRecord(node).status),
+    )
     const scoreUnknown = graph.nodes.filter((node) => node.lenses?.openssf?.status !== 'found')
     result.paragraphs.push(
       `Loaded graph: ${releaseUnknown.length} modules have unknown release status; ${scoreUnknown.length} lack a found repository Scorecard observation.`,

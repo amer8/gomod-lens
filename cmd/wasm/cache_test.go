@@ -73,6 +73,10 @@ func TestCanceledCacheOpenKeepsUpgradeCallbackUntilSettlement(t *testing.T) {
 			if _, err := openCacheDB(ctx); !errors.Is(err, context.Canceled) {
 				t.Fatalf("canceled open did not return: %v", err)
 			}
+			// Another canceled waiter joins the same still-pending open.
+			if _, err := openCacheDB(ctx); !errors.Is(err, context.Canceled) || len(requests) != 1 {
+				t.Fatalf("concurrent first opens: requests=%d err=%v", len(requests), err)
+			}
 			request := requests[0]
 			upgrade, success, failure := request.Get("onupgradeneeded"), request.Get("onsuccess"), request.Get("onerror")
 			if fail {

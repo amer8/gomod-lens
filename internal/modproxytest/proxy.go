@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -34,6 +35,7 @@ func Env(t testing.TB, modules map[string]string) []string {
 func New(t testing.TB, modules map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
+	lists := make(map[string][]string)
 	for id, mod := range modules {
 		at := strings.LastIndex(id, "@")
 		if at < 0 {
@@ -44,6 +46,7 @@ func New(t testing.TB, modules map[string]string) string {
 		if err := os.MkdirAll(base, 0o755); err != nil {
 			t.Fatal(err)
 		}
+		lists[base] = append(lists[base], version)
 		var archive bytes.Buffer
 		writer := zip.NewWriter(&archive)
 		for name, contents := range map[string]string{"go.mod": mod, "fixture.go": "package fixture\n"} {
@@ -66,6 +69,12 @@ func New(t testing.TB, modules map[string]string) string {
 			if err := os.WriteFile(filepath.Join(base, name), contents, 0o644); err != nil {
 				t.Fatal(err)
 			}
+		}
+	}
+	for base, versions := range lists {
+		slices.Sort(versions)
+		if err := os.WriteFile(filepath.Join(base, "list"), []byte(strings.Join(versions, "\n")+"\n"), 0o644); err != nil {
+			t.Fatal(err)
 		}
 	}
 	return (&url.URL{Scheme: "file", Path: filepath.ToSlash(dir)}).String()

@@ -12,7 +12,7 @@ export function createGraphLayout(model) {
     dragCoefficient: 0.03,
     theta: 0.8,
     timeStep: 20,
-    nodeMass: (id) => 1 + (model.graph.getLinks(id)?.size || 0) / 3 + size(id) * 0.1,
+    nodeMass: (id) => 1 + (model.graph.getLinks(id)?.length || 0) / 3 + size(id) * 0.1,
     springTransform(link, spring) {
       spring.length = Math.max(80, (size(link.fromId) + size(link.toId)) / 2 + 4)
     },

@@ -88,7 +88,13 @@ func (r *Resolver) openSSFScoreForNode(ctx context.Context, node graph.Node) (*g
 		return r.openSSFErrorScore(ctx, module, version, err)
 	}
 
-	projectIDs := sourceProjectIDs(module, versionInfo.RelatedProjects)
+	projectIDs := sourceProjectIDs(versionInfo.RelatedProjects)
+	var mappedProject string
+	if len(projectIDs) > 0 {
+		mappedProject = projectIDs[0]
+	} else {
+		projectIDs = graph.InferOpenSSFProjectIDs(module)
+	}
 	if len(projectIDs) == 0 {
 		return &graph.OpenSSFScore{
 			Module:  module,
@@ -119,9 +125,10 @@ func (r *Resolver) openSSFScoreForNode(ctx context.Context, node graph.Node) (*g
 	}
 
 	return &graph.OpenSSFScore{
-		Module:  module,
-		Version: version,
-		Status:  "no_scorecard",
+		Module:    module,
+		Version:   version,
+		Status:    "no_scorecard",
+		ProjectID: mappedProject,
 	}, nil
 }
 
@@ -201,17 +208,14 @@ func (r *Resolver) fetchDepsDevProject(ctx context.Context, projectID string) (d
 	return payload, nil
 }
 
-func sourceProjectIDs(modulePath string, relatedProjects []depsDevRelatedProject) []string {
+func sourceProjectIDs(relatedProjects []depsDevRelatedProject) []string {
 	ids := make([]string, 0)
 	for _, project := range relatedProjects {
 		if project.RelationType == "SOURCE_REPO" && strings.TrimSpace(project.ProjectKey.ID) != "" {
 			ids = append(ids, project.ProjectKey.ID)
 		}
 	}
-	if len(ids) > 0 {
-		return ids
-	}
-	return graph.InferOpenSSFProjectIDs(modulePath)
+	return ids
 }
 
 func needsIncompatible(modulePath, version string) bool {

@@ -19,11 +19,15 @@ export async function verifyBrowser(page) {
       ),
     )
     check.model = model
+    check.container.style.display = 'none'
     check.scene = createGraphScene(check.container, model, {
       renderer: 'webgpu',
       onNodeSelected: (node) => check.selected.push(node?.id || ''),
     })
     await check.scene.ready
+    check.container.style.display = ''
+    await new Promise(requestAnimationFrame)
+    await new Promise(requestAnimationFrame)
     check.scene.draw()
     return {
       actual: { ...check.scene.camera },
@@ -37,7 +41,7 @@ export async function verifyBrowser(page) {
   assert.deepEqual(
     initialCamera.actual,
     initialCamera.expected,
-    'the scene must fit before its first draw',
+    'a graph mounted at zero size must fit when it first becomes visible',
   )
   assert.equal(await page.evaluate(() => check.scene.renderer), 'webgpu')
   const target = await page.evaluate(() => {
@@ -278,5 +282,50 @@ export async function verifyBrowser(page) {
     deviceLossFallback: true,
     refusedAdapterFallback: true,
     canceledInitialization: true,
+  }
+}
+
+// Median draw p95 of three paired trials at 1280×800, DPR 2. Layout runs once
+// before the paired trials. These are advisory comparisons on matching devices.
+const baseline = {
+  cpu: 'Apple M4 Pro',
+  gpu: 'metal-3',
+  chromeMajor: 158,
+  nodes: 1500,
+  edges: 5946,
+  layout300StepsMs: 682.7,
+  canvasDrawP95Ms: 4.7,
+  webgpuDrawP95Ms: 1.1,
+}
+
+export function compareBaseline(environment, results) {
+  const ceiling = results.filter((r) => r.nodes === baseline.nodes && r.edges === baseline.edges)
+  assert.equal(ceiling.length, 6, 'expected three paired trials at the node ceiling')
+  const medianDraw = (mode) =>
+    ceiling
+      .filter((r) => r.mode === mode)
+      .map((r) => r.drawP95Ms)
+      .sort((a, b) => a - b)[1]
+  const observed = {
+    layout300StepsMs: ceiling[0].layout300StepsMs,
+    canvasDrawP95Ms: medianDraw('canvas'),
+    webgpuDrawP95Ms: medianDraw('webgpu'),
+  }
+  const major = Number(environment.userAgent.match(/Chrome\/(\d+)/)?.[1])
+  if (
+    environment.cpu !== baseline.cpu ||
+    environment.adapter?.architecture !== baseline.gpu ||
+    environment.fallbackAdapter ||
+    environment.devicePixelRatio !== 2 ||
+    major !== baseline.chromeMajor
+  ) {
+    console.log('Timings recorded. The device or browser differs from the reference run.')
+    return
+  }
+  for (const [metric, value] of Object.entries(observed)) {
+    if (value > baseline[metric] * 1.5)
+      console.warn(
+        `Benchmark warning: ${metric} measured ${value.toFixed(1)} ms, reference ${baseline[metric]} ms.`,
+      )
   }
 }

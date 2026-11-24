@@ -4,7 +4,7 @@ import { element, notice, badge, metrics, link, moduleButton, searchable, action
 /** @typedef {import('./types.js').GraphNode} GraphNode */
 /** @typedef {import('./types.js').GraphPayload} GraphPayload */
 /** @typedef {{name: string, version: string}} ModuleIdentity */
-/** @typedef {{status: 'observed' | 'nonstandard' | 'unknown', identity?: ModuleIdentity, expressions?: string[], source?: string, observedAt?: string, error?: string}} LicenseRecord */
+/** @typedef {{status: 'observed' | 'nonstandard' | 'unknown', identity?: ModuleIdentity, expressions?: string[], source?: string, observedAt?: string, message?: string, error?: string}} LicenseRecord */
 /** @typedef {{records: Map<string, LicenseRecord>, capturedAt: string}} LicenseData */
 
 /**
@@ -59,7 +59,7 @@ export async function lookupLicenses(graph, { signal, progress, fetcher } = {}) 
     if (!identity)
       return {
         status: 'unknown',
-        error: 'No resolved public module version is available.',
+        message: 'No resolved public module version is available.',
         expressions: [],
       }
     const source = versionURL(identity)
@@ -73,10 +73,10 @@ export function licenseColors(graph, data) {
   /** @type {Record<LicenseRecord['status'], string>} */
   const colors = { observed: '#78ceb3', nonstandard: '#f2c976', unknown: '#8b95a7' }
   return Object.fromEntries(
-    graph.nodes.map((node) => [
-      node.id,
-      colors[('records' in data && data.records.get(node.id)?.status) || 'unknown'],
-    ]),
+    graph.nodes.map((node) => {
+      const record = 'records' in data ? data.records.get(node.id) : undefined
+      return [node.id, record?.error !== undefined ? '#e5a15a' : colors[record?.status || 'unknown']]
+    }),
   )
 }
 /** @param {import('./types.js').RenderContext<LicenseData>} context */
@@ -113,7 +113,9 @@ function render({ host, graph, node, data, select, highlight, state = {} }) {
   } else
     detail.append(
       notice(
-        selected.error || 'No license evidence is available for this exact version.',
+        selected.error ||
+          selected.message ||
+          'No license evidence is available for this exact version.',
         'analysis-empty',
       ),
     )
@@ -162,6 +164,8 @@ function render({ host, graph, node, data, select, highlight, state = {} }) {
         item.record.expressions.forEach((value) =>
           state.append(badge(value, item.status === 'observed' ? 'good' : 'warning')),
         )
+      else if (item.record.error !== undefined)
+        state.append(badge('Unknown · lookup failed', 'warning'))
       else state.append(badge('Unknown'))
       return [moduleButton(item.node, select), state]
     },
@@ -176,7 +180,7 @@ function render({ host, graph, node, data, select, highlight, state = {} }) {
   host.append(
     actions,
     notice(
-      'Graph: green = identifiers observed · amber = non-standard · gray = unknown. These colors show evidence availability; they are not license approval decisions.',
+      'Graph: green = identifiers observed · amber = non-standard · orange = lookup failed · gray = unknown. These colors show evidence availability; they are not license approval decisions.',
     ),
   )
   host.append(

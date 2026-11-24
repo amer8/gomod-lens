@@ -48,23 +48,21 @@ test('curated capabilities retain supported thinking and the selected native too
   assert.equal(unknown.nativeTools, false)
   assert.ok(capabilityBadges(unknown).some((value) => value.label === 'Thinking unverified'))
 })
-test('curated system templates preserve role and history boundaries and reject removed IDs', () => {
-  const history = [{ question: 'Old question', answer: 'Old answer' }]
+test('curated system templates preserve instruction and request roles and reject removed IDs', () => {
   for (const model of models) {
-    const standard = chatMessages(model.id, answerInstructions, 'Current question', history)
+    const standard = chatMessages(model.id, answerInstructions, 'Current question')
     assert.deepEqual(
       standard.map((message) => message.role),
-      ['system', 'user', 'assistant', 'user'],
+      ['system', 'user'],
     )
     assert.equal(standard[0].content, answerInstructions)
     assert.equal(standard.at(-1).content, 'Current question')
   }
-  assert.deepEqual(history, [{ question: 'Old question', answer: 'Old answer' }])
   assert.throws(() => chatMessages(deepseek, answerInstructions, 'Question'), /Unsupported/)
 })
 test('selected thinking models use explicit controls while standard alternatives receive no thinking flags', () => {
   for (const model of models) {
-    const planning = chatMessages(model.id, planningInstructions, 'Question', [], { query: true })
+    const planning = chatMessages(model.id, planningInstructions, 'Question', { query: true })
     assert.equal(planning[0].content, planningInstructions)
     if (model.thinking) {
       assert.equal(generationOptions(model.id).extra_body.enable_thinking, true)
@@ -97,13 +95,14 @@ test('app-check badges cannot be inferred from a loaded model, partial results o
     suiteVersion: checkSuiteVersion,
     results: checkCases.map((item) => ({ id: item.id, passed: true })),
   }
-  assert.equal(checkSummary(checkedReport(value, qwen)).label, '3/3 passed')
+  assert.equal(checkSummary(checkedReport(value, qwen)).label, '4/4 passed')
   for (const invalid of [
     { ...value, modelID: deepseek },
     { ...value, runtimeVersion: 'future' },
+    { ...value, suiteVersion: 1 },
     { ...value, results: value.results.slice(1) },
-    { ...value, results: [value.results[0], value.results[0], value.results[2]] },
-    { ...value, results: [null, value.results[1], value.results[2]] },
+    { ...value, results: [value.results[1], ...value.results.slice(1)] },
+    { ...value, results: [null, ...value.results.slice(1)] },
   ]) {
     assert.throws(() => checkedReport(invalid, qwen), /complete report/)
   }
@@ -112,7 +111,7 @@ test('app-check badges cannot be inferred from a loaded model, partial results o
     ...value,
     results: value.results.map((item, index) => ({ ...item, passed: index !== 1 })),
   }
-  assert.equal(checkSummary(checkedReport(failed, qwen)).label, '2/3 passed')
+  assert.equal(checkSummary(checkedReport(failed, qwen)).label, '3/4 passed')
 })
 test('worker app checks run production inference and retain failed cases without streaming fixture answers', async (t) => {
   const previousSelf = globalThis.self
@@ -129,13 +128,19 @@ test('worker app checks run production inference and retain failed cases without
       completions: {
         async create(request) {
           requests.push(request)
-          if (!request.stream)
-            return {
-              choices: [{ message: { content: '{"topic":0,"node":0,"followUps":[1,2,3]}' } }],
-            }
-          const user = request.messages.at(-1).content
+          const user = JSON.parse(request.messages.at(-1).content)
+          if (!request.stream) {
+            const plan = user.question.includes('pflag')
+              ? {
+                  topic: 'paths',
+                  node: correct ? user.modules.find((m) => m.module.includes('/pflag@')).index : 0,
+                  followUps: ['licenses', 'selected', 'overview'],
+                }
+              : { topic: 'licenses', node: 0, followUps: ['paths', 'releases', 'unknown'] }
+            return { choices: [{ message: { content: JSON.stringify(plan) } }] }
+          }
           const text = correct
-            ? user.includes('Question: Which dependency')
+            ? user.question.startsWith('Which dependency')
               ? 'example.org/isc-lib uses ISC.'
               : 'https://github.com/gin-gonic/gin'
             : 'I do not know.'
@@ -159,8 +164,8 @@ test('worker app checks run production inference and retain failed cases without
     messages.find((message) => message.id === 2 && message.value).value,
     qwen,
   )
-  assert.equal(checkSummary(result).label, '3/3 passed')
-  assert.equal(requests.length, 3)
+  assert.equal(checkSummary(result).label, '4/4 passed')
+  assert.equal(requests.length, 4)
   assert.ok(requests.every((request) => request.messages[0].role === 'system'))
   assert.ok(!messages.some((message) => message.type === 'token'))
   assert.doesNotMatch(JSON.stringify(messages), /PRIVATE_REASONING|example.org\/isc-lib/)
@@ -170,7 +175,8 @@ test('worker app checks run production inference and retain failed cases without
     messages.find((message) => message.id === 3 && message.value).value,
     qwen,
   )
-  assert.equal(checkSummary(failed).label, '1/3 passed')
+  assert.equal(checkSummary(failed).label, '1/4 passed')
+  assert.equal(failed.results.find((item) => item.id === 'dependency-path').passed, false)
 })
 test('canceling app checks terminates inference without producing a passing report', async (t) => {
   let worker

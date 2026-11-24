@@ -19,6 +19,10 @@ export function repositoryFor(node) {
     return { url: 'https://' + match[1], project: match[1], inferred: true }
   return null
 }
+// Match the named endpoint, including a bare module name in a path question.
+const rootConnection =
+  /\bhow\s+(?:(?:does|is)\s+)?(?:the\s+)?(?:module\s+)?[`'"]?([\w.@/+\-]+)[`'"]?\s+connect(?:s|ed)?\s+to\s+(?:the\s+)?root\b/i
+
 /**
  * @param {string} question
  * @param {import('../../assistant-types').Context} context
@@ -30,13 +34,14 @@ export function questionContext(question, context, history = []) {
     .filter((node) => text.includes(node.name.toLowerCase()))
     .sort((a, b) => b.name.length - a.name.length)
   if (full.length) return { ...context, selected: full[0].id }
+  const pathTarget = text.match(rootConnection)?.[1]
   const aliases = context.graph.nodes.filter((node) => {
     const parts = node.name
       .replace(/\/v\d+$/, '')
       .toLowerCase()
       .split('/')
     const alias = parts.slice(-2).join('/')
-    return alias.includes('/') && text.includes(alias)
+    return (alias.includes('/') && text.includes(alias)) || parts.at(-1) === pathTarget
   })
   if (aliases.length === 1) return { ...context, selected: aliases[0].id }
   if (/\broot (module|project)|\bmain module/.test(text))
@@ -51,7 +56,7 @@ export function questionContext(question, context, history = []) {
   return { ...context }
 }
 // This selects observations to retrieve, not a canned answer. Custom wording is
-// passed intact to the model, together with conversation history and facts.
+// passed intact to the model, together with recent questions and observations.
 /** @param {string} question */
 export function customTopics(question) {
   const text = question.toLowerCase(),
@@ -65,6 +70,14 @@ export function customTopics(question) {
   if (/scorecard|repository checks|security practice|maintain/.test(text)) topics.push('scorecard')
   if (/update|upgrad|latest|older|outdat|behind|fresh|release/.test(text)) topics.push('updates')
   return topics.length ? topics : ['overview']
+}
+const truncationMarker = '… [truncated]'
+
+/** @param {string} text @param {number} limit */
+function excerpt(text, limit) {
+  return text.length <= limit
+    ? text
+    : text.slice(0, limit - truncationMarker.length) + truncationMarker
 }
 /**
  * @param {string} question
@@ -105,14 +118,14 @@ export function customPacket(question, context, evidence = {}) {
   const facts = reports.map((report, index) => ({
     id: 'E' + (index + 1),
     investigation: report.topic,
-    statements: report.paragraphs.join(' ').slice(0, 700),
+    statements: excerpt(report.paragraphs.join(' '), 700),
     findings: report.items
       .slice(0, report.topic === 'lenses' ? report.items.length : 4)
-      .map((item) => ({ module: item.label, detail: item.detail.slice(0, 180) })),
+      .map((item) => ({ module: item.label, detail: excerpt(item.detail, 180) })),
     omittedFindings: report.topic === 'lenses' ? 0 : Math.max(0, report.items.length - 4),
     path: report.path?.slice(0, 8),
     omittedPathSteps: Math.max(0, (report.path?.length || 0) - 8),
-    scope: report.scope.slice(0, 300),
+    scope: excerpt(report.scope, 300),
     observedAt: report.observedAt,
   }))
   if (topics.includes('repository') || topics.includes('selected') || topics.includes('paths'))
@@ -152,6 +165,7 @@ export function customPacket(question, context, evidence = {}) {
     rootModule: context.graph.rootId,
     selectedModule: context.selected,
     facts,
+    evidence: evidenceBlocks(facts),
     sources,
     actions: focused?.actions || [{ label: 'Show selected module', ids: [selected.id] }],
     topic: topics[0],
@@ -167,32 +181,54 @@ export function recentHistory(turns, revision) {
     .slice(-2)
     .map((turn) => ({
       question: turn.question.slice(0, 400),
-      answer: (turn.answer || '').slice(0, 600),
       selected: turn.selected,
     }))
 }
 
 /** @param {(import('../../assistant-types').EvidenceFact | import('../../assistant-types').RepositoryFact)[]} facts */
-export function evidenceText(facts) {
-  return facts
-    .map((fact) => {
-      if ('module' in fact)
-        return `[R] Module: ${fact.module}@${fact.version}. Source repository URL: ${fact.repositoryURL || 'unavailable'}. ${fact.repositoryMapping}`
-      return [
-        `[${fact.id}] ${fact.investigation}: ${fact.statements}`,
-        fact.path?.length ? 'Requirement path: ' + fact.path.join(' → ') : '',
-        ...(fact.findings || []).map((item) => item.module + ': ' + item.detail),
-        fact.omittedFindings
-          ? `${fact.omittedFindings} further findings omitted; use the stated totals.`
-          : '',
-        fact.omittedPathSteps ? `${fact.omittedPathSteps} further path steps omitted.` : '',
-        fact.scope,
-      ]
-        .filter(Boolean)
-        .join('\n')
+function evidenceBlocks(facts) {
+  const blocks = []
+  let remaining = 7000 - 2 // JSON array brackets
+  for (const fact of facts) {
+    const label =
+      '[' + fact.id + '] ' + ('module' in fact ? 'Repository identity' : fact.investigation)
+    const detail =
+      'module' in fact
+        ? `${fact.module}@${fact.version}. Source repository URL: ${fact.repositoryURL || 'unavailable'}. ${fact.repositoryMapping}`
+        : [
+            fact.statements,
+            fact.path?.length ? 'Requirement path: ' + fact.path.join(' → ') : '',
+            ...fact.findings.map((item) => item.module + ': ' + item.detail),
+            fact.omittedFindings ? `${fact.omittedFindings} further findings omitted.` : '',
+            fact.omittedPathSteps ? `${fact.omittedPathSteps} further path steps omitted.` : '',
+            fact.scope,
+          ]
+            .filter(Boolean)
+            .join('\n')
+    // Include JSON quoting and reserve room for the final omission notice.
+    const block = { label, detail }
+    const overhead = JSON.stringify({ label, detail: '' }).length + 1
+    const available = remaining - overhead - 80
+    if (available < truncationMarker.length) break
+    if (JSON.stringify(detail).length - 2 > available) {
+      let budget = available - truncationMarker.length
+      block.detail = ''
+      for (const char of detail) {
+        budget -= JSON.stringify(char).length - 2
+        if (budget < 0) break
+        block.detail += char
+      }
+      block.detail += truncationMarker
+    }
+    blocks.push(block)
+    remaining -= JSON.stringify(block).length + 1
+  }
+  if (blocks.length < facts.length)
+    blocks.push({
+      label: 'Evidence limit',
+      detail: `${facts.length - blocks.length} further observations omitted.`,
     })
-    .join('\n\n')
-    .slice(0, 7000)
+  return blocks
 }
 
 // An explicit graph-path request has a verifiable answer. Keep its requirement
@@ -207,6 +243,7 @@ export function customInvestigation(question) {
   )
     return 'lenses'
   if (/version|import|function|unused|source code/.test(text)) return null
+  if (rootConnection.test(text)) return 'paths'
   return /\bwhy\b.*\b(included|required|dependency)\b|\bhow\b.*\bconnected\b|\brequirement path\b/.test(
     text,
   )

@@ -1,6 +1,5 @@
 import { topicIDs, topics, validatePlan } from './queries.js'
 import { checkedReport } from './model-checks.js'
-import { evidenceText } from './custom.js'
 import { defaultModelID, findModel, models, runtimeURL } from './models.js'
 
 export const modelID = defaultModelID
@@ -192,7 +191,7 @@ export class LocalAI {
   /**
    * @param {string} question
    * @param {ReturnType<typeof import('./custom.js').customPacket>} packet
-   * @param {{question: string, answer: string}[]} history
+   * @param {{question: string}[]} history
    * @param {AbortSignal} [signal]
    * @param {(text: string) => void} [onText]
    * @param {{thinking?: boolean, onStatus?: (status: string) => void}} [options]
@@ -207,10 +206,10 @@ export class LocalAI {
       'answer',
       {
         question: question.slice(0, 1200),
-        evidence: evidenceText(packet.facts),
+        evidence: packet.evidence,
         rootModule: packet.rootModule,
         selectedModule: packet.selectedModule,
-        history,
+        previousQuestions: history.map((turn) => turn.question),
         thinking: enabled,
       },
       { signal, timeout: enabled ? 180000 : 90000, onText, onStatus },

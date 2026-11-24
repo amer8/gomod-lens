@@ -31,6 +31,8 @@ func TestResolveGraphBuildsBrowserGraph(t *testing.T) {
 		proxyModuleURL("example.com/indirect") + "/@v/v1.1.0.mod":   "module example.com/indirect\n",
 		proxyModuleURL("example.com/transitive") + "/@v/list":       "v0.1.0\nv0.2.0\n",
 		proxyModuleURL("example.com/transitive") + "/@v/v0.1.0.mod": "module example.com/transitive\n",
+		proxyModuleURL("example.com/dep") + "/@v/v1.0.1.mod":        "module example.com/dep\n",
+		proxyModuleURL("example.com/transitive") + "/@v/v0.2.0.mod": "module example.com/transitive\n",
 		depsDevVersionURL("example.com/root", "v1.2.0"):             `{}`,
 		depsDevVersionURL("example.com/dep", "v1.0.0"):              `{}`,
 		depsDevVersionURL("example.com/indirect", "v1.1.0"):         `{}`,

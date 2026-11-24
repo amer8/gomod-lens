@@ -2,8 +2,8 @@ import { createServer } from 'node:http'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve, extname } from 'node:path'
 import { createRequire } from 'node:module'
-import { platform, release, arch } from 'node:os'
-import { verifyBrowser } from './verify.mjs'
+import { platform, release, arch, cpus } from 'node:os'
+import { verifyBrowser, compareBaseline } from './verify.mjs'
 
 const require = createRequire(import.meta.url)
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright')
@@ -87,6 +87,7 @@ try {
       devicePixelRatio,
     }
   })
+  environment.cpu = cpus()[0]?.model
   console.log(JSON.stringify({ environment }))
   if (!environment.gpu)
     throw new Error(
@@ -126,11 +127,12 @@ try {
   const layoutOnly = process.argv.includes('--layout')
   const smoke = process.argv.includes('--smoke'),
     results = [],
-    sizes =
-      verify || layoutOnly
-        ? []
-        : livePayload
-          ? [livePayload.nodes.length]
+    sizes = layoutOnly
+      ? []
+      : livePayload
+        ? [livePayload.nodes.length]
+        : verify
+          ? [1500]
           : smoke
             ? [35]
             : [100, 500, 1500]
@@ -193,6 +195,7 @@ try {
         console.log(JSON.stringify(results.at(-1)))
       }
     }
+  if (!livePayload && !layoutOnly && !smoke) compareBaseline(environment, results)
   if (errors.length) throw new Error(`Browser errors: ${errors.join('\n')}`)
   const output = process.env.BENCHMARK_OUTPUT || '/private/tmp/gomod-lens-webgpu-benchmark.json'
   await writeFile(

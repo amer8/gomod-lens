@@ -107,6 +107,7 @@ test('custom prompts retain only recent completed history from the current graph
     ['Second', 'Third'],
   )
   assert.equal(recentHistory(turns, 2)[0].selected, net.id)
+  assert.ok(recentHistory(turns, 2).every((turn) => !('answer' in turn)))
   assert.deepEqual(recentHistory([], 2), [])
 })
 test('custom answers require the model, stream its reply, and propagate failure without a canned fallback', async () => {
@@ -147,7 +148,7 @@ test('custom answers require the model, stream its reply, and propagate failure 
     assert.equal(requests.at(-1).type, 'answer')
     assert.equal(requests.at(-1).question, packet.question)
     assert.match(
-      requests.at(-1).evidence,
+      requests.at(-1).evidence[0].detail,
       /Source repository URL: https:\/\/github.com\/gin-gonic\/gin/,
     )
     fail = true
@@ -167,6 +168,16 @@ test('explicit inclusion questions use verified graph paths without turning unre
   assert.equal(customInvestigation('Why was this version selected?'), null)
   assert.equal(customInvestigation('Why does my program crash?'), null)
   assert.equal(customInvestigation('Does my function import x/net?'), null)
+})
+
+test('a root connection question resolves a unique short module name', () => {
+  const question = 'How does net connect to the root?'
+  assert.equal(customInvestigation(question), 'paths')
+  assert.equal(questionContext(question, context).selected, net.id)
+  assert.equal(questionContext('How is subnet connected to the root?', context).selected, root.id)
+  const other = { id: 'example.org/net@v1.0.0', name: 'example.org/net' }
+  const ambiguous = { ...context, graph: { ...graph, nodes: [...graph.nodes, other] } }
+  assert.equal(questionContext(question, ambiguous).selected, root.id)
 })
 
 test('available-lens questions use the actual registry without module highlights or external lookups', () => {
@@ -198,4 +209,15 @@ test('available-lens questions use the actual registry without module highlights
     browserLenses.map((lens) => lens.label),
   )
   assert.ok(!packet.facts.some((fact) => fact.investigation === 'overview'))
+})
+
+test('bounded evidence identifies clipped fields and omitted observations', () => {
+  const selected = { ...root, name: 'example.org/' + '"'.repeat(8000) }
+  const packet = customPacket('What is the repository and release status?', {
+    selected: selected.id,
+    graph: { rootId: selected.id, nodes: [selected], edges: [] },
+  })
+  assert.match(packet.evidence[0].detail, /\[truncated\]$/)
+  assert.match(packet.evidence.at(-1).detail, /further observations omitted/)
+  assert.ok(JSON.stringify(packet.evidence).length <= 7000)
 })

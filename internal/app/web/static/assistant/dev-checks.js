@@ -41,9 +41,15 @@ const ai = new LocalAI({
     else progress.removeAttribute('value')
   },
 })
+const headings = byID('check-headings')
+for (const item of checkCases) {
+  const heading = document.createElement('th')
+  heading.textContent = item.label
+  headings.append(heading)
+}
 for (const model of models) {
   const row = document.createElement('tr'),
-    cells = [model.id, 'Not run', '—', '—', '—'].map((text) => {
+    cells = [model.id, 'Not run', ...checkCases.map(() => '—')].map((text) => {
       const cell = document.createElement('td')
       cell.textContent = text
       row.append(cell)
@@ -138,5 +144,5 @@ run.addEventListener('click', async () => {
   status.textContent =
     `${canceled ? 'Stopped' : 'Finished'}: ` +
     `${report.results.length}/${selected.length} models attempted; ` +
-    `${passedCount} passed all three checks.`
+    `${passedCount} passed all ${checkCases.length} checks.`
 })

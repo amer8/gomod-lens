@@ -63,3 +63,12 @@ func TestOpenSSFScoreForNodeUsesModuleReplacementTarget(t *testing.T) {
 func depsDevProjectURL(projectID string) string {
 	return depsDevBaseURL + "/projects/" + url.PathEscape(projectID)
 }
+
+func TestOpenSSFProject404PreservesObservedMapping(t *testing.T) {
+	node := graph.Node{Name: "example.org/mod", Version: "v1.2.0"}
+	fetcher := fakeFetcher{depsDevVersionURL(node.Name, node.Version): `{"relatedProjects":[{"projectKey":{"id":"github.com/example/repo"},"relationType":"SOURCE_REPO"}]}`}
+	score, err := New(fetcher).openSSFScoreForNode(context.Background(), node)
+	if err != nil || score.Status != "no_scorecard" || score.ProjectID != "github.com/example/repo" {
+		t.Fatalf("project lookup: %+v, %v", score, err)
+	}
+}

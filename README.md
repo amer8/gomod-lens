@@ -9,7 +9,7 @@ Vulnerability exposure, License evidence and Go requirements.
 Deployed to GitHub Pages: https://amer8.github.io/gomod-lens/
 
 After a public module loads, the version selector shows the loaded version,
-marks the latest version reported by the Go module proxy, and lets you switch
+shows the latest eligible release when freshness data is available, and lets you switch
 to older published versions. The search field keeps the module path; Analyze
 preserves the selected version for that module. Explicit `module@version`
 input and shared URLs still work.
@@ -25,6 +25,7 @@ github.com/gin-gonic/gin@v1.10.0
 ```
 
 The graph shows resolved module versions and their requirement relationships.
+The browser resolver supports up to 1,500 selected modules, including the root.
 Use the version selector to load another published release. URLs preserve the
 selected root version and lens, so another person can open the same view.
 

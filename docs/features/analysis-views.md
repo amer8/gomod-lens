@@ -10,6 +10,11 @@ The static WebAssembly application provides five analysis lenses:
 | `licenses` | Evidence inventory | Filter the module table and inspect exact-version source expressions. |
 | [`go-requirements`](go-requirements.md) | Toolchain comparison | Compare minimum Go versions with a target toolchain and inspect requirement paths and `go.mod` sources. |
 
+Release Freshness checks the highest tagged release’s `go.mod` for retractions
+and excludes retracted versions when choosing the latest release. A pinned
+dependency stays in the graph and appears in the **Retracted** queue. The
+**Lookup failed** queue identifies requests that returned errors.
+
 Select a lens with the centered toolbar, or link to it directly:
 
 ```text

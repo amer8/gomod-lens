@@ -42,6 +42,12 @@ func TestClassifyReleaseFreshness(t *testing.T) {
 			want:          ReleaseFreshnessStatusPrerelease,
 		},
 		{
+			name:          "timestamp tag",
+			version:       "v1.0.0-20210101120000",
+			latestVersion: "v1.0.0",
+			want:          ReleaseFreshnessStatusPrerelease,
+		},
+		{
 			name:          "pseudo version",
 			version:       "v0.0.0-20240501120000-abcdef123456",
 			latestVersion: "v0.1.0",

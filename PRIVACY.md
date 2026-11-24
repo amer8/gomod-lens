@@ -26,9 +26,9 @@ run Go commands, download source archives for license detection, or contact
 the Go checksum database. The module mirror receives requested public module
 paths and versions. Filesystem replacements are not followed.
 
-The Release Freshness lens uses module version-list and latest-version
-endpoints for modules in the graph. The version selector also requests the
-root module's version list and latest version directly from the browser.
+The Release Freshness lens uses module version lists, the latest-version endpoint
+and published `go.mod` files to check for retractions. The version selector also requests the
+root module’s version list and reuses its freshness result when available.
 Successful version-selector lookups are kept in page memory for five minutes.
 
 Opening the Go requirements lens reuses exact-version metadata already parsed
@@ -75,9 +75,10 @@ Advisories retain their original database licenses:
 
 ### GitHub Search
 
-The module suggestion box uses the GitHub REST repository search API. Search
-queries typed into the module search box may be sent to GitHub when suggestions
-are requested.
+The browser sends the search text to GitHub’s repository search API when it
+requests suggestions. Analyzing a short name such as `gin` also sends the name
+to GitHub to resolve it to a repository. These requests share GitHub’s
+unauthenticated search limit of 10 requests per minute.
 
 See GitHub's API terms and search rate-limit documentation:
 <https://docs.github.com/en/site-policy/github-terms/github-terms-of-service>
@@ -105,8 +106,8 @@ Choosing **Load model** or **Switch model** loads model files from
 `huggingface.co` and the model's GPU runtime from GitHub-hosted MLC artifacts.
 Those hosts receive normal artifact requests, including connection metadata;
 questions and graph context are processed locally in a Web Worker. The model
-uses module evidence and the last two completed exchanges from the current
-conversation to generate custom answers. Optional Qwen3 thinking runs in the same
+receives module evidence and the user’s questions from the last two completed
+turns for the current graph. Previous answers stay in the page transcript. Optional Qwen3 thinking runs in the same
 worker; thinking blocks are discarded before streaming to the page and are not
 added to conversation history. Suggested investigations use
 allowlisted analysis queries. Source links and graph actions are produced by

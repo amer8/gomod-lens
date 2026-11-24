@@ -33,7 +33,7 @@ type Resolver struct {
 	mu                  sync.Mutex
 	modFileCache        map[string]moduleMeta
 	versionInfoCache    map[string]string
-	releaseVersionCache map[string]string
+	releaseVersionCache map[string]releaseVersions
 	depsDevVersionCache map[string]depsDevVersion
 	depsDevProjectCache map[string]depsDevProject
 }
@@ -73,7 +73,7 @@ func New(fetcher Fetcher) *Resolver {
 		fetcher:             fetcher,
 		modFileCache:        make(map[string]moduleMeta),
 		versionInfoCache:    make(map[string]string),
-		releaseVersionCache: make(map[string]string),
+		releaseVersionCache: make(map[string]releaseVersions),
 		depsDevVersionCache: make(map[string]depsDevVersion),
 		depsDevProjectCache: make(map[string]depsDevProject),
 	}
@@ -202,41 +202,14 @@ func (r *Resolver) resolveTargetVersion(ctx context.Context, path, version strin
 }
 
 func (r *Resolver) resolveLatestVersion(ctx context.Context, path string) (string, error) {
-	var latest struct {
-		Version string `json:"Version"`
-	}
-	err := r.fetchJSON(ctx, proxyModuleURL(path)+"/@latest", "application/json", &latest)
-	if err == nil && latest.Version != "" {
-		return latest.Version, nil
-	}
-	if err != nil && !IsNotFound(err) {
-		return "", err
-	}
-
-	list, err := r.fetchText(ctx, proxyModuleURL(path)+"/@v/list", "text/plain,*/*")
+	release, err := r.latestRelease(ctx, path)
 	if err != nil {
 		return "", err
 	}
-	versions := make([]string, 0)
-	for version := range strings.FieldsSeq(list) {
-		version = strings.TrimSpace(version)
-		if version != "" && parseGoVersion(version) != nil {
-			versions = append(versions, version)
-		}
+	if release.latest == "" {
+		return "", fmt.Errorf("no unretracted release available for %s", path)
 	}
-	sort.Slice(versions, func(i, j int) bool {
-		return compareGoVersions(versions[i], versions[j]) > 0
-	})
-	if len(versions) > 0 {
-		for _, version := range versions {
-			if parsed := parseGoVersion(version); parsed != nil && parsed.Prerelease == "" {
-				return version, nil
-			}
-		}
-		return versions[0], nil
-	}
-
-	return "", fmt.Errorf("proxy did not return a latest version for %s", path)
+	return release.latest, nil
 }
 
 func (r *Resolver) resolveVersionInfo(ctx context.Context, path, version string) (string, error) {
@@ -253,7 +226,7 @@ func (r *Resolver) resolveVersionInfo(ctx context.Context, path, version string)
 	}
 	err := r.fetchJSON(ctx, proxyModuleURL(path)+"/@v/"+proxyPathEscape(version)+".info", "application/json", &payload)
 	if err != nil {
-		if parseGoVersion(version) != nil {
+		if IsNotFound(err) && parseGoVersion(version) != nil {
 			r.mu.Lock()
 			r.versionInfoCache[key] = version
 			r.mu.Unlock()

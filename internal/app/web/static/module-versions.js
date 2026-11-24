@@ -38,10 +38,14 @@ export function selectedModuleTarget(target, modulePath, version) {
 /**
  * @param {string} modulePath
  * @param {string} loaded
- * @param {{signal?: AbortSignal, fetcher?: typeof fetch}} [options]
+ * @param {{signal?: AbortSignal, fetcher?: typeof fetch, knownLatest?: string}} [options]
  * @returns {Promise<VersionResults>}
  */
-export async function fetchModuleVersions(modulePath, loaded, { signal, fetcher = fetch } = {}) {
+export async function fetchModuleVersions(
+  modulePath,
+  loaded,
+  { signal, fetcher = fetch, knownLatest } = {},
+) {
   const escaped = modulePath
     .replace(/[A-Z]/g, (c) => '!' + c.toLowerCase())
     .split('/')
@@ -56,7 +60,9 @@ export async function fetchModuleVersions(modulePath, loaded, { signal, fetcher 
   }
   const [list, info] = await Promise.allSettled([
     get('/@v/list').then((response) => response.text()),
-    get('/@latest').then(async (response) => /** @type {unknown} */ (await response.json())),
+    knownLatest === undefined
+      ? get('/@latest').then(async (response) => /** @type {unknown} */ (await response.json()))
+      : { Version: knownLatest },
   ])
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
   const listed =
@@ -80,7 +86,7 @@ export async function fetchModuleVersions(modulePath, loaded, { signal, fetcher 
       compareVersions(b, a),
     ),
     latest,
-    partial: list.status === 'rejected' || !latest,
+    partial: list.status === 'rejected' || (knownLatest === undefined && !latest),
   }
 }
 
@@ -163,26 +169,31 @@ export function createModuleVersionPicker(form, input) {
       controller = request
       const timer = setTimeout(() => request.abort(), 15000)
       try {
+        const freshness = root.lenses?.['release-freshness']
+        const knownLatest = freshness ? freshness.details?.latestVersion || '' : undefined
         const cached = cache.get(path)
         const data =
           cached && Date.now() - cached.at < 300000
             ? cached.data
-            : await fetchModuleVersions(path, loaded, { signal: request.signal })
+            : await fetchModuleVersions(path, loaded, { signal: request.signal, knownLatest })
         if (current !== generation) return
         if (!data.partial) cache.set(path, { at: Date.now(), data })
-        const versions = [...new Set([loaded, ...data.versions])].sort((a, b) =>
-          compareVersions(b, a),
+        const latest = knownLatest ?? data.latest
+        const versions = [...new Set([loaded, ...(latest ? [latest] : []), ...data.versions])].sort(
+          (a, b) => compareVersions(b, a),
         )
         select.replaceChildren(...versions.map((version) => new Option(version, version)))
         select.value = loaded
         select.disabled = versions.length < 2
-        select.title = 'Loaded: ' + loaded + (data.latest ? ' · Latest: ' + data.latest : '')
-        note.hidden = !data.partial && data.latest === loaded
+        select.title = 'Loaded: ' + loaded + (latest ? ' · Latest: ' + latest : '')
+        note.hidden = !data.partial && latest === loaded
         note.textContent = data.partial
           ? 'Some versions are unavailable. You can still enter module@version.'
-          : data.latest !== loaded
-            ? 'Latest: ' + data.latest
-            : 'Published versions · Go module proxy'
+          : !latest
+            ? 'Latest release unavailable.'
+            : latest !== loaded
+              ? 'Latest: ' + latest
+              : 'Published versions · Go module proxy'
       } catch (error) {
         if (current !== generation) return
         note.hidden = false

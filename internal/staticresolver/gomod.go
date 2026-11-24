@@ -31,6 +31,7 @@ type moduleMeta struct {
 	Requires         []requirement
 	Replacements     []replacement
 	Excludes         []exclusion
+	Retractions      []modfile.VersionInterval
 	SelectedPath     string
 	SelectedVersion  string
 	Replacement      *replacement
@@ -56,6 +57,9 @@ func parseGoMod(raw string) (moduleMeta, error) {
 	}
 	for _, item := range file.Require {
 		result.Requires = append(result.Requires, requirement{Path: item.Mod.Path, Version: item.Mod.Version, Indirect: item.Indirect})
+	}
+	for _, item := range file.Retract {
+		result.Retractions = append(result.Retractions, item.VersionInterval)
 	}
 	for _, item := range file.Exclude {
 		result.Excludes = append(result.Excludes, exclusion{Path: item.Mod.Path, Version: item.Mod.Version})

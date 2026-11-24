@@ -94,7 +94,7 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
               choices: [
                 {
                   message: {
-                    content: '<think>\n</think>\n{"topic":0,"node":0,"followUps":[1,2,3]}',
+                    content: '<think>\n</think>\n{"topic":"licenses","node":0,"followUps":["paths","unknown","selected"]}',
                   },
                 },
               ],
@@ -162,9 +162,15 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
       type: 'answer',
       id: 3,
       question: 'Where is the repository?',
-      evidence: '[R] repository URL',
-      history: [],
+      evidence: [{ label: '[R]', detail: 'quoted "module"\nwith two lines' }],
+      previousQuestions: [],
     },
+  })
+  const prompt = JSON.parse(requests[1].messages.at(-1).content)
+  assert.deepEqual(prompt, {
+    question: 'Where is the repository?',
+    previousQuestions: [],
+    observations: [{ label: '[R]', detail: 'quoted "module"\nwith two lines' }],
   })
   assert.equal(requests[1].extra_body.enable_thinking, true)
   assert.equal(messages.find((value) => value.id === 3 && value.value).value.text, 'Answer [R].')
@@ -185,7 +191,10 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
     choices: [
       {
         message: {
-          content: ++attempts === 1 ? '{"topic":' : '{"topic":0,"node":0,"followUps":[1,2,3]}',
+          content:
+            ++attempts === 1
+              ? '{"topic":'
+              : '{"topic":"licenses","node":0,"followUps":["paths","unknown","selected"]}',
         },
       },
     ],
@@ -210,6 +219,23 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
   assert.equal(attempts, 2)
   assert.match(messages.find((value) => value.id === 6).error, /could not interpret/)
   assert.equal(messages.find((value) => value.id === 6).value, undefined)
+  // An exact catalog question pins the main topic while leaving all follow-ups available.
+  const catalogRequests = []
+  engine.chat.completions.create = async (request) => {
+    catalogRequests.push(request)
+    const plan = {
+      topic: catalogRequests.length === 1 ? 'licenses' : 'paths',
+      node: 0,
+      followUps: ['licenses', 'selected', 'unknown'],
+    }
+    return { choices: [{ message: { content: JSON.stringify(plan) } }] }
+  }
+  await handler({ data: { ...query, id: 8, question: '  PATHS?  ' } })
+  assert.equal(catalogRequests.length, 2)
+  const fields = JSON.parse(catalogRequests[0].response_format.schema).properties
+  assert.deepEqual(fields.topic.enum, ['paths'])
+  assert.deepEqual(fields.followUps.items.enum, Object.keys(query.topics))
+  assert.equal(messages.find((value) => value.id === 8).value.topic, 'paths')
   // Exhaustion while thinking must become an error rather than an empty success.
   engine.chat.completions.create = async () =>
     (async function* () {
@@ -218,7 +244,14 @@ test('actual worker emits final-answer tokens and status, but never hidden reaso
       }
     })()
   await handler({
-    data: { type: 'answer', id: 4, question: '?', evidence: '', history: [], thinking: true },
+    data: {
+      type: 'answer',
+      id: 4,
+      question: '?',
+      evidence: [],
+      previousQuestions: [],
+      thinking: true,
+    },
   })
   assert.match(messages.find((value) => value.id === 4 && value.error).error, /final answer/)
   assert.doesNotMatch(JSON.stringify(messages), /PRIVATE_REASONING/)
@@ -273,7 +306,13 @@ test('interrupting a planner skips its retry and keeps the next generation on th
   })
   await planning.promise
   await dispatch({ id: 2, type: 'interrupt' })
-  const answer = { type: 'answer', question: '?', evidence: '', history: [], thinking: false }
+  const answer = {
+    type: 'answer',
+    question: '?',
+    evidence: [],
+    previousQuestions: [],
+    thinking: false,
+  }
   const skipped = dispatch({ ...answer, id: 3 })
   await dispatch({ id: 3, type: 'interrupt' })
   const next = dispatch({ ...answer, id: 4 })

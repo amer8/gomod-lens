@@ -8,7 +8,7 @@ import { outgoingIndex, shortestPath, dependencyCounts } from './graph-traversal
  * @property {string} id
  * @property {GraphNode} data
  * @property {number} index
- * @property {Set<ModelLink>} links
+ * @property {ModelLink[]} links
  * @property {number} dependencyScale
  * @property {number} importance
  * @property {number} radius
@@ -35,6 +35,7 @@ const freshnessColors = {
   major_behind: '#dc5f65',
   prerelease: '#b985ff',
   pseudo_version: '#b985ff',
+  retracted: '#dc5f65',
   error: '#e5a15a',
 }
 const unknown = '#8b95a7',
@@ -84,7 +85,7 @@ export function createGraphModel(payload) {
     id: data.id,
     data,
     index,
-    links: new Set(),
+    links: [],
     dependencyScale: Math.min(1, Math.sqrt(counts.get(data.id) || 0) / Math.sqrt(maxCount)),
     importance: 0,
     radius: 0,
@@ -114,8 +115,8 @@ export function createGraphModel(payload) {
     }
     links.push(link)
     targets.set(target.id, link)
-    source.links.add(link)
-    target.links.add(link)
+    source.links.push(link)
+    if (source !== target) target.links.push(link)
   }
   // Immutable snapshots expose the small graph protocol needed by the retained
   // CPU layout. Graph storage itself has no ngraph dependency.
@@ -176,7 +177,8 @@ export function createGraphModel(payload) {
     const selectedNodes = new Set()
     /** @type {Set<number>} */
     const selectedLinks = new Set()
-    if (request) {
+    const singleSelection = request?.ids.length === 1 && !request.nodesOnly
+    if (request && !singleSelection) {
       for (const id of request.ids || []) if (byID.has(id)) selectedNodes.add(id)
       if (!request.nodesOnly)
         for (const link of links)
@@ -195,14 +197,18 @@ export function createGraphModel(payload) {
         selectedLinks.add(link.id)
       }
     }
-    const filtering = !!request || byID.has(selection)
+    const highlightColor =
+      selectedNodes.size && request?.color && /^#[\da-f]{6}$/i.test(request.color)
+        ? request.color
+        : null
+    const filtering = (request && !singleSelection) || byID.has(selection)
     for (const node of nodes) {
       const i = node.index * 8,
         faded = filtering && !selectedNodes.has(node.id)
       node.radius =
         (zoom < 0.7 ? 2 : zoom < 2.3 ? 3 : 4) +
         node.dependencyScale * (zoom < 0.7 ? 3.5 : zoom < 2.3 ? 5 : 6)
-      node.color = faded ? dimmed : lensColor(node.data, lens, colors)
+      node.color = faded ? dimmed : highlightColor || lensColor(node.data, lens, colors)
       node.alpha = faded ? 0.28 : 1
       nodeData.set(
         [
@@ -228,7 +234,10 @@ export function createGraphModel(payload) {
           link.target.radius,
           highlighted ? 2 : 1,
           0,
-          ...rgba(lensColor(link.target.data, lens, colors), faded ? 0.12 : 0.5),
+          ...rgba(
+            (highlighted && highlightColor) || lensColor(link.target.data, lens, colors),
+            faded ? 0.12 : 0.5,
+          ),
         ],
         link.index * 12,
       )
@@ -280,10 +289,8 @@ export function createGraphModel(payload) {
     },
     /** @param {HighlightRequest | null} value */
     highlight(value) {
-      if (value?.ids?.length === 1 && !value.nodesOnly) {
-        selection = value.ids[0]
-        request = null
-      } else request = value?.ids?.length ? value : null
+      request = value?.ids?.length ? value : null
+      if (request?.ids.length === 1 && !request.nodesOnly) selection = request.ids[0]
       update()
     },
   }

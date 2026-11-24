@@ -12,6 +12,8 @@ const categories = [
   ['major_behind', 'Major behind', 'bad'],
   ['preview', 'Pre-release / pseudo', ''],
   ['unknown', 'Unknown / unavailable', ''],
+  ['error', 'Lookup failed', 'warning'],
+  ['retracted', 'Retracted', 'bad'],
 ]
 
 /** @param {GraphNode} node */

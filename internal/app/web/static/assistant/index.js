@@ -420,7 +420,7 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
     updateAI()
     modelChoices.find(({ radio }) => radio.checked)?.radio.focus({ preventScroll: true })
   }
-  function updateAI() {
+  function updateAI(preserveStatus = false) {
     modelButton.disabled = !navigator.gpu
     modelSearch.disabled = enabling
     if (!navigator.gpu)
@@ -452,7 +452,7 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
     setBusy()
     renderStarters()
     disableOldActions()
-    if (!controller)
+    if (!controller && !preserveStatus)
       status.textContent = ai.ready
         ? (findModel(ai.loadedModelID)?.name || 'Model') + ' ready'
         : enabling
@@ -946,30 +946,7 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
           topic: packet.topic,
           scope: '',
           observedAt: '',
-          evidence: packet.facts.map((fact) =>
-            'module' in fact
-              ? {
-                  label: '[' + fact.id + '] Repository identity',
-                  detail: `${fact.module}@${fact.version} · ${fact.repositoryURL || 'Repository unavailable'}. ${fact.repositoryMapping}`,
-                }
-              : {
-                  label: '[' + fact.id + '] ' + fact.investigation,
-                  detail: [
-                    fact.statements,
-                    fact.path?.join(' → '),
-                    ...fact.findings.map((item) => item.module + ': ' + item.detail),
-                    fact.scope,
-                    fact.omittedPathSteps
-                      ? `${fact.omittedPathSteps} further path steps omitted.`
-                      : '',
-                    fact.omittedFindings
-                      ? `${fact.omittedFindings} other findings omitted from the model context.`
-                      : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' '),
-                },
-          ),
+          evidence: packet.evidence,
         }
       }
       turn.selected =
@@ -995,7 +972,9 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
       )
       status.textContent =
         (findModel(ai.loadedModelID)?.name || 'Model') +
-        ' · answer grounded in graph and source observations'
+        (answer.generated
+          ? ' · generated from the supplied observations'
+          : ' · graph investigation complete')
     } catch (error) {
       const message =
         error instanceof Error
@@ -1016,7 +995,7 @@ export function createGraphAssistant({ app, loadEvidence, select, highlight, ope
     } finally {
       if (request === ownRequest) {
         controller = null
-        updateAI()
+        updateAI(true)
         transcript.scrollTop = transcript.scrollHeight
       }
     }

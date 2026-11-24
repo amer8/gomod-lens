@@ -37,3 +37,34 @@ func TestRequirementsBridgeUsesGoParserAndRefreshBypassesCache(t *testing.T) {
 		t.Fatalf("unexpected observation after %d requests: %v", requests, record)
 	}
 }
+
+func TestGraphAndSearchBridgeLimitRequestsWithoutCallerSignal(t *testing.T) {
+	global := js.Global()
+	oldFetch, oldIDB := global.Get("fetch"), global.Get("indexedDB")
+	defer global.Set("fetch", oldFetch)
+	defer global.Set("indexedDB", oldIDB)
+	global.Set("indexedDB", js.Undefined())
+	calls := 0
+	fetch := js.FuncOf(func(_ js.Value, args []js.Value) any {
+		calls++
+		if !args[1].Get("signal").Truthy() {
+			t.Errorf("missing timeout signal for %s", args[0].String())
+		}
+		return global.Get("Promise").Call("reject", global.Get("DOMException").New("Request timed out", "TimeoutError"))
+	})
+	defer fetch.Release()
+	global.Set("fetch", fetch)
+	for _, tc := range []struct {
+		entry func(js.Value, []js.Value) any
+		input string
+	}{{resolveGraph, "example.org/module@v1.0.0"}, {searchModules, "module"}} {
+		promise := tc.entry(js.Undefined(), []js.Value{js.ValueOf(tc.input)}).(js.Value)
+		_, err := awaitPromise(context.Background(), promise)
+		if err == nil || err.Error() != "Request timed out" {
+			t.Fatalf("timeout not propagated: %v", err)
+		}
+	}
+	if calls != 2 {
+		t.Fatalf("expected one request from each bridge, got %d", calls)
+	}
+}

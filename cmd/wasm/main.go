@@ -14,6 +14,8 @@ import (
 	"github.com/amer8/gomod-lens/internal/staticresolver"
 )
 
+const requestTimeoutMillis = 20000
+
 func main() {
 	js.Global().Set("gomodLensResolveGraph", js.FuncOf(resolveGraph))
 	js.Global().Set("gomodLensSearchModules", js.FuncOf(searchModules))
@@ -30,7 +32,7 @@ func resolveGraph(_ js.Value, args []js.Value) any {
 		ctx, cleanup := contextFromOptions(options)
 		defer cleanup()
 
-		fetcher := browserFetcher{signal: signalFromOptions(options)}
+		fetcher := browserFetcher{signal: signalFromOptions(options), timeoutMillis: requestTimeoutMillis}
 		resolver := staticresolver.New(fetcher)
 		graph, err := resolver.ResolveGraph(ctx, target, staticresolver.Options{
 			Progress: progressCallback(options),
@@ -52,7 +54,7 @@ func searchModules(_ js.Value, args []js.Value) any {
 		ctx, cleanup := contextFromOptions(options)
 		defer cleanup()
 
-		fetcher := browserFetcher{signal: signalFromOptions(options)}
+		fetcher := browserFetcher{signal: signalFromOptions(options), timeoutMillis: requestTimeoutMillis}
 		resolver := staticresolver.New(fetcher)
 		results, err := resolver.SearchModules(ctx, query, limit)
 		if err != nil {
@@ -75,7 +77,7 @@ func loadGoRequirements(_ js.Value, args []js.Value) any {
 			return
 		}
 		refresh := options.Truthy() && options.Get("refresh").Truthy()
-		resolver := staticresolver.New(browserFetcher{signal: signalFromOptions(options), refresh: refresh, timeoutMillis: 20000})
+		resolver := staticresolver.New(browserFetcher{signal: signalFromOptions(options), refresh: refresh, timeoutMillis: requestTimeoutMillis})
 		result, err := resolver.LookupGoRequirements(ctx, nodes, func(done, total int) {
 			if !options.Truthy() {
 				return

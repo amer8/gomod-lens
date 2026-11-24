@@ -1,4 +1,4 @@
-import { publicJSON } from './public-data.js'
+import { publicIdentity, publicJSON, PublicHTTPError } from './public-data.js'
 import { element, notice, badge, metrics, disclosure, link } from './ui.js'
 
 /** @typedef {import('./types.js').GraphNode} GraphNode */
@@ -108,18 +108,38 @@ export function normalizeReport(project, source, fetchedAt = new Date().toISOStr
  * @returns {Promise<ScorecardReport>}
  */
 export async function loadReport(node, { signal, fetcher } = {}) {
-  const project = node?.lenses?.openssf?.details?.projectId
-  if (!project)
-    return {
-      missing: true,
-      checks: [],
-      message: 'No source repository mapping is available for this module.',
+  const observation = node?.lenses?.openssf
+  const project = observation?.details?.projectId
+  if (!project) {
+    if (observation?.status === 'error')
+      throw new Error(observation.message || 'Scorecard lookup failed.')
+    let message = 'No source repository mapping is available for this module.'
+    switch (observation?.status) {
+      case 'skipped':
+        message = 'Scorecard lookup skipped. ' + (observation.message || '')
+        break
+      case 'no_scorecard':
+        message = 'No published Scorecard report was found for this module.'
+        break
+      case 'unavailable':
+        message = 'deps.dev has no metadata for this module version.'
+        break
     }
+    return { missing: true, checks: [], message }
+  }
   const source = 'https://api.deps.dev/v3/projects/' + encodeURIComponent(project)
-  return normalizeReport(await publicJSON(source, { signal, fetcher }), source)
+  try {
+    return normalizeReport(await publicJSON(source, { signal, fetcher }), source)
+  } catch (error) {
+    if (error instanceof PublicHTTPError && error.status === 404)
+      return { missing: true, source, checks: [] }
+    throw error
+  }
 }
 /** @param {import('./types.js').RenderContext<ScorecardReport>} context */
 function render({ host, data, node, state = {} }) {
+  if (node.replaced && node.replacement)
+    host.append(notice('Resolved replacement: ' + node.replacement))
   if ('error' in data) {
     host.append(notice(data.error, 'analysis-empty'))
     return
@@ -146,7 +166,9 @@ function render({ host, data, node, state = {} }) {
       'Captured ' +
         (data.date ? data.date.slice(0, 10) : 'at an unknown date') +
         '. This repository snapshot may differ from the selected ' +
-        (node.version || 'module version') +
+        (node.lenses?.openssf?.details?.version ||
+          publicIdentity(node)?.version ||
+          'module version') +
         '.',
     ),
   )

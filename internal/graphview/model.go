@@ -209,6 +209,7 @@ func ReleaseFreshnessGroups(g graph.Graph) []GroupEntry {
 		{Name: "pre-release / pseudo", Color: releaseFreshnessPreviewColor, NodesOnly: true},
 		{Name: "unknown freshness", Color: releaseFreshnessUnknownColor, NodesOnly: true},
 		{Name: "lookup error", Color: releaseFreshnessErrorColor, NodesOnly: true},
+		{Name: "retracted", Color: releaseFreshnessMajorColor, NodesOnly: true},
 	}
 
 	for _, node := range g.Nodes {
@@ -218,6 +219,8 @@ func ReleaseFreshnessGroups(g graph.Graph) []GroupEntry {
 			buckets[5].IDs = append(buckets[5].IDs, node.ID)
 		case info.Status == graph.ReleaseFreshnessStatusError:
 			buckets[6].IDs = append(buckets[6].IDs, node.ID)
+		case info.Status == graph.ReleaseFreshnessStatusRetracted:
+			buckets[7].IDs = append(buckets[7].IDs, node.ID)
 		case info.Status == graph.ReleaseFreshnessStatusCurrent:
 			buckets[0].IDs = append(buckets[0].IDs, node.ID)
 		case info.Status == graph.ReleaseFreshnessStatusPatchBehind:

@@ -56,7 +56,7 @@ test('catalog contains exactly the curated ten and excludes removed runtime vari
   assert.equal(new Set(models.map((model) => model.id)).size, 10)
   assert.equal(models.filter((model) => model.recommended).length, 1)
   assert.equal(findModel(defaultModelID).recommended, true)
-  assert.equal(catalogInfo.version, '0.2.86')
+  assert.equal(catalogInfo.version, '0.2.89')
   assert.equal(
     runtimeURL,
     new URL(`../internal/app/web/static/vendor/web-llm-${catalogInfo.version}.js`, import.meta.url)
@@ -82,6 +82,21 @@ test('catalog contains exactly the curated ten and excludes removed runtime vari
   assert.equal(findModel('DeepSeek-R1-Distill-Qwen-7B-q4f32_1-MLC'), undefined)
   assert.equal(findModel('gemma-4-E2B-it-q4f32_1-MLC'), undefined)
   assert.equal(findModel('untrusted-model'), undefined)
+})
+test('shortlisted metadata matches the catalog shipped in the pinned WebLLM bundle', async () => {
+  const { prebuiltAppConfig, functionCallingModelIds, ModelType } = await import(runtimeURL)
+  for (const model of models) {
+    const matches = prebuiltAppConfig.model_list.filter((record) => record.model_id === model.id)
+    assert.equal(matches.length, 1, model.id)
+    const [record] = matches
+    assert.equal(model.url, record.model, model.id)
+    assert.equal(model.gpuMB, record.vram_required_MB, model.id)
+    assert.equal(model.contextTokens, record.overrides?.context_window_size, model.id)
+    assert.deepEqual(model.features, record.required_features ?? [], model.id)
+    assert.equal(model.vision, record.model_type === ModelType.VLM, model.id)
+    assert.equal(model.nativeTools, functionCallingModelIds.includes(model.id), model.id)
+    assert.equal(model.manifest, record.model_manifest ?? null, model.id)
+  }
 })
 test('every offered checkpoint has license information and Llama derivatives keep their base terms', () => {
   assert.ok(
@@ -251,7 +266,7 @@ test('Qwen3 custom answers default to thinking and forward only active request s
   const ai = new LocalAI({ workerFactory: () => worker })
   t.after(() => ai.stop())
   await ai.enable('Qwen3-0.6B-q4f32_1-MLC')
-  const packet = { facts: [], rootModule: 'root', selectedModule: 'root' }
+  const packet = { evidence: [], rootModule: 'root', selectedModule: 'root' }
   await ai.answer('Question', packet, [], undefined, undefined, {
     onStatus: (text) => statuses.push(text),
   })

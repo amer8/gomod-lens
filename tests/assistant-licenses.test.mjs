@@ -5,11 +5,7 @@ import {
   licenseQuery,
   matchesLicense,
 } from '../internal/app/web/static/assistant/license-query.js'
-import {
-  customTopics,
-  customPacket,
-  evidenceText,
-} from '../internal/app/web/static/assistant/custom.js'
+import { customTopics, customPacket } from '../internal/app/web/static/assistant/custom.js'
 import { answerQuestion } from '../internal/app/web/static/assistant/queries.js'
 
 const nodes = Array.from({ length: 18 }, (_, index) => ({
@@ -90,7 +86,10 @@ test('ISC inventory filtering scans all modules, beyond both prompt and display 
   assert.equal(packet.topic, 'licenses')
   assert.equal(fact.findings.length, 1)
   assert.equal(fact.findings[0].module, 'github.com/davecgh/go-spew')
-  assert.match(evidenceText(packet.facts), /github.com\/davecgh\/go-spew: ISC/)
+  assert.match(
+    packet.evidence.map((block) => block.detail).join(' '),
+    /github.com\/davecgh\/go-spew: ISC/,
+  )
 })
 test('other custom questions prioritize named license matches before bounding model evidence', () => {
   const packet = customPacket('Explain ISC evidence for these modules', context, evidence)

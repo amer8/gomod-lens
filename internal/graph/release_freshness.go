@@ -1,13 +1,15 @@
 package graph
 
 import (
-	"sort"
 	"strings"
+
+	"golang.org/x/mod/module"
 
 	"github.com/amer8/gomod-lens/internal/semver"
 )
 
 const (
+	ReleaseFreshnessStatusRetracted     = "retracted"
 	ReleaseFreshnessStatusCurrent       = "current"
 	ReleaseFreshnessStatusPatchBehind   = "patch_behind"
 	ReleaseFreshnessStatusMinorBehind   = "minor_behind"
@@ -137,16 +139,16 @@ func ReleaseFreshnessRequestForNode(node Node) (ReleaseFreshnessRequest, *Releas
 
 // ClassifyReleaseFreshness compares version to latestVersion and returns a lens
 // result with a stable status taxonomy.
-func ClassifyReleaseFreshness(module, version, latestVersion string) ReleaseFreshnessInfo {
-	module = strings.TrimSpace(module)
+func ClassifyReleaseFreshness(modulePath, version, latestVersion string) ReleaseFreshnessInfo {
+	modulePath = strings.TrimSpace(modulePath)
 	version = strings.TrimSpace(version)
 	latestVersion = strings.TrimSpace(latestVersion)
 	info := ReleaseFreshnessInfo{
-		Module:        module,
+		Module:        modulePath,
 		Version:       version,
 		LatestVersion: latestVersion,
 	}
-	if module == "" || version == "" {
+	if modulePath == "" || version == "" {
 		info.Status = ReleaseFreshnessStatusSkipped
 		info.Message = "module version is not available"
 		return info
@@ -168,7 +170,7 @@ func ClassifyReleaseFreshness(module, version, latestVersion string) ReleaseFres
 		info.Message = "module version could not be compared"
 		return info
 	}
-	if isPseudoModuleVersion(version) {
+	if module.IsPseudoVersion(version) {
 		info.Status = ReleaseFreshnessStatusPseudoVersion
 		return info
 	}
@@ -214,35 +216,33 @@ func ReleaseFreshnessUnavailable(module, version string) ReleaseFreshnessInfo {
 	}
 }
 
-// LatestStableModuleVersion returns the highest stable semver in a Go proxy
-// version list. If no stable version exists, it returns the highest comparable
-// version so callers can still classify pre-release-only modules.
+// LatestStableModuleVersion prefers a tagged release over a prerelease.
+// Pseudo-versions are obtained from the proxy's @latest fallback.
 func LatestStableModuleVersion(versionList string) string {
-	versions := make([]string, 0)
-	for _, version := range strings.Fields(versionList) {
-		version = strings.TrimSpace(version)
-		if version != "" && parseModuleVersion(version) != nil {
-			versions = append(versions, version)
-		}
-	}
-	sort.Slice(versions, func(i, j int) bool {
-		return compareModuleVersions(versions[i], versions[j]) > 0
-	})
-	for _, version := range versions {
+	var stable, preview string
+	for version := range strings.FieldsSeq(versionList) {
 		parsed := parseModuleVersion(version)
-		if parsed != nil && parsed.Prerelease == "" && !isPseudoModuleVersion(version) {
-			return version
+		if parsed == nil || module.IsPseudoVersion(version) {
+			continue
+		}
+		if parsed.Prerelease == "" {
+			if stable == "" || compareModuleVersions(version, stable) > 0 {
+				stable = version
+			}
+		} else if preview == "" || compareModuleVersions(version, preview) > 0 {
+			preview = version
 		}
 	}
-	if len(versions) > 0 {
-		return versions[0]
+	if stable != "" {
+		return stable
 	}
-	return ""
+	return preview
 }
 
 func releaseFreshnessScore(status string) *float64 {
 	scores := map[string]float64{
 		ReleaseFreshnessStatusCurrent:       1,
+		ReleaseFreshnessStatusRetracted:     0.2,
 		ReleaseFreshnessStatusPatchBehind:   0.78,
 		ReleaseFreshnessStatusMinorBehind:   0.54,
 		ReleaseFreshnessStatusMajorBehind:   0.28,
@@ -266,24 +266,6 @@ func parseModuleVersion(version string) *semver.Version {
 
 func compareModuleVersions(left, right string) int {
 	return semver.Compare(left, right)
-}
-
-func isPseudoModuleVersion(version string) bool {
-	parsed := parseModuleVersion(version)
-	if parsed == nil || parsed.Prerelease == "" {
-		return false
-	}
-	// Pseudo-version timestamps use a hyphen before the revision, unlike the
-	// dot-delimited identifiers used for SemVer precedence.
-	for _, part := range strings.FieldsFunc(parsed.Prerelease, func(r rune) bool { return r == '.' || r == '-' }) {
-		if len(part) != 14 {
-			continue
-		}
-		if strings.Trim(part, "0123456789") == "" {
-			return true
-		}
-	}
-	return false
 }
 
 func splitReleaseModuleToken(token string) (string, string) {

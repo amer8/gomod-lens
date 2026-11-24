@@ -1,3 +1,4 @@
+import { Element } from './helpers/element.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createAnalysisViews } from '../internal/app/web/static/analysis/index.js'
@@ -31,82 +32,6 @@ const lens = (label, options = {}) => ({
 function fixture(t, importers = {}, preferred = 'openssf') {
   let views
   t.after(() => views?.loading())
-  class Element extends EventTarget {
-    constructor() {
-      super()
-      this.children = []
-      this.parentElement = null
-      this.dataset = {}
-      this.attributes = new Map()
-      this.className = ''
-      this.hidden = false
-      this.textContent = ''
-      this.classList = {
-        contains: (name) => this.className.split(/\s+/).includes(name),
-        toggle: (name, force) => {
-          const classes = new Set(this.className.split(/\s+/).filter(Boolean))
-          const added = force ?? !classes.has(name)
-          if (added) classes.add(name)
-          else classes.delete(name)
-          this.className = [...classes].join(' ')
-          return added
-        },
-      }
-    }
-    append(...nodes) {
-      for (const node of nodes) {
-        node.parentElement = this
-        this.children.push(node)
-      }
-    }
-    prepend(...nodes) {
-      for (const node of [...nodes].reverse()) {
-        node.parentElement = this
-        this.children.unshift(node)
-      }
-    }
-    replaceChildren(...nodes) {
-      this.children.forEach((node) => {
-        node.parentElement = null
-      })
-      this.children = []
-      this.append(...nodes)
-    }
-    insertBefore(node, before) {
-      node.parentElement = this
-      this.children.splice(this.children.indexOf(before), 0, node)
-    }
-    setAttribute(name, value) {
-      this.attributes.set(name, String(value))
-    }
-    removeAttribute(name) {
-      this.attributes.delete(name)
-    }
-    getAttribute(name) {
-      return this.attributes.get(name) ?? null
-    }
-    matches(selector) {
-      if (selector.startsWith('.')) return this.className.split(/\s+/).includes(selector.slice(1))
-      if (selector.startsWith('#')) return this.id === selector.slice(1)
-      const attribute = /^\[data-([\w-]+)\]$/.exec(selector)
-      return Boolean(
-        attribute &&
-          attribute[1].replace(/-([a-z])/g, (_, char) => char.toUpperCase()) in this.dataset,
-      )
-    }
-    querySelectorAll(selector) {
-      return this.children.flatMap((node) => [
-        ...(node.matches(selector) ? [node] : []),
-        ...node.querySelectorAll(selector),
-      ])
-    }
-    querySelector(selector) {
-      return this.querySelectorAll(selector)[0] || null
-    }
-    closest(selector) {
-      return this.matches(selector) ? this : this.parentElement?.closest(selector) || null
-    }
-  }
   const app = new Element()
   app.id = 'app'
   const toolbar = new Element()

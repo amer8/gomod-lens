@@ -7,6 +7,12 @@ filter unavailable or low scores, and expand a check for its explanation, eviden
 and documentation. All details use the sidebar’s scroll area on desktop and mobile. The footer identifies the assessed
 repository commit, capture date and Scorecard engine version.
 
+During graph loading, the Scorecard phase looks up each public module version
+in deps.dev and checks candidate source repositories for a report. Up to five
+modules are processed concurrently. On a large graph this can account for most
+of the load time. Successful responses stay in the browser’s IndexedDB cache
+for one day.
+
 Try `github.com/google/uuid@v1.6.0`. Changing the version preserves the lens;
 repository reports describe their own snapshot, not necessarily that release.
 Missing project mappings or unavailable checks stay unknown. Refresh retries

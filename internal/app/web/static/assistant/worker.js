@@ -4,7 +4,7 @@ import { chatMessages, planningInstructions, answerInstructions } from './prompt
 import { checkCases, checkSuiteVersion } from './model-checks.js'
 
 /** @typedef {{question: string, topics: Record<string, string>, nodes: {id: string}[], selected: string, asked: string[]}} PlanningData */
-/** @typedef {{question: string, evidence: string, history: {question: string, answer: string}[], thinking: boolean}} AnswerData */
+/** @typedef {{question: string, evidence: {label: string, detail: string}[], previousQuestions: string[], thinking: boolean}} AnswerData */
 /** @typedef {{id: number, type: 'cache'}} CacheRequest */
 /** @typedef {{id: number, type: 'init', modelID: string}} InitRequest */
 /** @typedef {{id: number, type: 'interrupt'}} InterruptRequest */
@@ -39,15 +39,22 @@ function activeEngine() {
 /** @param {PlanningData} data @param {AbortSignal} [signal] */
 async function planInvestigation(data, signal) {
   const ids = Object.keys(data.topics)
+  const question = data.question.slice(0, 1200)
+  // A catalog question already identifies its topic. Follow-ups still use the full catalog.
+  /** @param {string} text */
+  const normalize = (text) => text.trim().toLowerCase().replace(/[?!.]+$/, '')
+  const normalized = normalize(question)
+  const canonicalTopic = ids.find((id) => normalize(data.topics[id]) === normalized)
+  const allowedTopics = canonicalTopic ? [canonicalTopic] : ids
   const schema = {
     type: 'object',
     additionalProperties: false,
     properties: {
-      topic: { type: 'integer', enum: ids.map((_, index) => index) },
+      topic: { type: 'string', enum: allowedTopics },
       node: { type: 'integer', enum: data.nodes.map((_, index) => index) },
       followUps: {
         type: 'array',
-        items: { type: 'integer', enum: ids.map((_, index) => index) },
+        items: { type: 'string', enum: ids },
         minItems: 3,
         maxItems: 3,
       },
@@ -55,14 +62,14 @@ async function planInvestigation(data, signal) {
     required: ['topic', 'node', 'followUps'],
   }
   const user = JSON.stringify({
-    question: data.question.slice(0, 1200),
-    investigations: ids.map((id, index) => ({ index, topic: id, description: data.topics[id] })),
+    question,
+    investigations: data.topics,
     selected: data.nodes.findIndex((node) => node.id === data.selected),
     modules: data.nodes.map((node, index) => ({ index, module: node.id })),
     alreadyAsked: data.asked.slice(-12),
   })
   const request = {
-    messages: chatMessages(modelID, planningInstructions, user, [], { query: true }),
+    messages: chatMessages(modelID, planningInstructions, user, { query: true }),
     ...generationOptions(modelID, { query: true }),
     response_format: { type: 'json_object', schema: JSON.stringify(schema) },
   }
@@ -74,9 +81,8 @@ async function planInvestigation(data, signal) {
       const plan = /** @type {unknown} */ (
         JSON.parse(finalAnswer(response.choices[0].message.content))
       )
-      /** @param {unknown} index @returns {index is number} */
-      const validTopic = (index) =>
-        typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < ids.length
+      /** @param {unknown} id @returns {id is string} */
+      const validTopic = (id) => typeof id === 'string' && ids.includes(id)
       if (
         !plan ||
         typeof plan !== 'object' ||
@@ -84,23 +90,24 @@ async function planInvestigation(data, signal) {
         !('node' in plan) ||
         !('followUps' in plan)
       )
-        throw new Error('Invalid investigation indices')
+        throw new Error('Invalid investigation plan')
       const followUps = Array.isArray(plan.followUps)
         ? /** @type {unknown[]} */ (plan.followUps)
         : []
       if (
-        !validTopic(plan.topic) ||
+        typeof plan.topic !== 'string' ||
+        !allowedTopics.includes(plan.topic) ||
         typeof plan.node !== 'number' ||
         !Number.isInteger(plan.node) ||
         !data.nodes[plan.node] ||
         followUps.length !== 3 ||
         !followUps.every(validTopic)
       )
-        throw new Error('Invalid investigation indices')
+        throw new Error('Invalid investigation plan')
       return {
-        topic: ids[plan.topic],
+        topic: plan.topic,
         nodeID: data.nodes[plan.node].id,
-        followUps: followUps.map((index) => ids[index]),
+        followUps,
       }
     } catch {
       if (attempt)
@@ -122,8 +129,11 @@ async function answer(data, emit = () => {}, signal) {
     messages: chatMessages(
       modelID,
       answerInstructions,
-      'Facts for the selected module:\n' + data.evidence + '\n\nQuestion: ' + data.question,
-      data.history,
+      JSON.stringify({
+        question: data.question,
+        previousQuestions: data.previousQuestions,
+        observations: data.evidence,
+      }),
     ),
     stream: true,
     ...options,

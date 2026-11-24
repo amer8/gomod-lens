@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { normalizeReport, loadReport } from '../internal/app/web/static/analysis/scorecard.js'
+import { Element } from './helpers/element.mjs'
+import lens, { normalizeReport, loadReport } from '../internal/app/web/static/analysis/scorecard.js'
 
 test('Scorecard preserves unavailable checks, explanations, provenance and future check names', () => {
   const result = normalizeReport(
@@ -58,4 +59,43 @@ test('Scorecard lookup uses the resolved source project, not the selected module
   assert.equal(called, 'https://api.deps.dev/v3/projects/github.com%2Fgolang%2Fnet')
   assert.equal(result.score, 9)
   assert.equal((await loadReport({ name: 'unknown', version: 'v1' })).missing, true)
+})
+
+test('Scorecard distinguishes project lookup outcomes', async () => {
+  const node = (status, message) => ({ lenses: { openssf: { status, message } } })
+  assert.match((await loadReport(node('no_scorecard'))).message, /no published/i)
+  assert.match(
+    (await loadReport(node('skipped', 'local replacement'))).message,
+    /skipped.*local replacement/i,
+  )
+  assert.match((await loadReport(node('no_project'))).message, /no source repository mapping/i)
+  await assert.rejects(loadReport(node('error', 'HTTP 429')), /HTTP 429/)
+})
+
+test('a missing mapped project shows an absent report and transient errors remain retryable', async () => {
+  const node = { lenses: { openssf: { details: { projectId: 'github.com/acme/missing' } } } }
+  const fetcher = (status) => async () => ({ ok: false, status })
+  assert.equal((await loadReport(node, { fetcher: fetcher(404) })).missing, true)
+  await assert.rejects(loadReport(node, { fetcher: fetcher(503) }), /503/)
+})
+
+test('replacement report displays the resolved module and version in the snapshot caveat', (t) => {
+  const old = globalThis.document
+  globalThis.document = { createElement: (tag) => new Element(tag) }
+  t.after(() => (old ? (globalThis.document = old) : delete globalThis.document))
+  const host = new Element()
+  lens.render({
+    host,
+    node: {
+      name: 'example.org/original',
+      version: 'v1.0.0',
+      replaced: true,
+      replacement: 'example.org/fork@v1.2.0',
+      lenses: { openssf: { details: { module: 'example.org/fork', version: 'v1.2.0' } } },
+    },
+    data: normalizeReport({ scorecard: { overallScore: 8 } }, 'https://example.org/report'),
+  })
+  const notices = host.querySelectorAll('p').map((p) => p.textContent)
+  assert.ok(notices.includes('Resolved replacement: example.org/fork@v1.2.0'))
+  assert.ok(notices.some((text) => text.includes('snapshot') && text.includes('v1.2.0')))
 })

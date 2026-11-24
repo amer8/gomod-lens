@@ -62,7 +62,7 @@ Unknown observations remain unknown, and the answer links the evidence and
 offers a highlight action for the matches. Expression matches do not infer
 license compatibility or the relationship between multiple expressions. Other custom
 questions are answered directly by the local model from bounded evidence
-and the last two completed exchanges in that conversation. For example,
+and the user’s questions from the last two completed turns for the current graph. For example,
 “Which lenses are available?” lists the registered lenses without module highlights
 or external lookups. Other app-guidance questions receive the same registry facts.
 “Where’s the repository on GitHub?” supplies the source repository URL rather
@@ -103,7 +103,7 @@ reachability analysis are not implemented by this assistant.
 ## Loading WebLLM
 
 Choose a model in the initial comparison table, then **Load model** to load
-WebLLM 0.2.86 in a Web Worker. Opening the chooser imports the runtime in a
+WebLLM 0.2.89 in a Web Worker. Opening the chooser imports the runtime in a
 short-lived worker to inspect browser cache state; selecting a row does not
 download model weights or allocate GPU memory.
 Qwen 2.5 1.5B remains the recommended default. The chooser contains a curated
@@ -155,11 +155,11 @@ Edit the canonical catalog, rebuild with `make wasm`, and update `catalogInfo.ve
 `tools/webllm-shortlist.json` defines the ten exact IDs, selection notes and
 model-card sources; keep it aligned with the catalog.
 
-The worker imports `assets/vendor/web-llm-0.2.86.js` from the app's origin.
+The worker imports `assets/vendor/web-llm-0.2.89.js` from the app's origin.
 To reproduce that file, download the npm tarball for the pinned version and
 verify its SHA-512 against the signed npm registry integrity before extracting
-`package/lib/index.js`. For 0.2.86 the tarball integrity is
-`sha512-plciXBCYtY7iTKHzEcsqOfSO+s5u8NqMYFPnHmRbsN8CEdKcolgXIoGLPbzO6FtJHV43m7YP00x6qQ6Kb8CJJw==`.
+`package/lib/index.js`. For 0.2.89 the tarball integrity is
+`sha512-DfWwDED9Lrdh3IspBvDiJypGqQ4KVrjz1FYNQc9fqNOyetpk8QvWj75mld8aEaGGWfU1/83yNZw5vFI6599Fxg==`.
 Keep the extracted bytes intact. On upgrades, update the versioned filename and
 the SHA-256 in `tools/webllm-runtime.sha256`. Run `make check` to verify the
 bundle, build the site and test the assistant.
@@ -199,9 +199,9 @@ on explicit **Run 10 models**; **Stop** terminates the current worker. Repeat th
 `model` query parameter with exact IDs to run a subset; the developer runner
 allows extra startup time for uncached large models.
 
-The three fixed synthetic fixtures cover license-investigation planning, an
-exact repository URL, and an ISC dependency lookup. Each model has separate
-per-fixture pass/fail results; load errors and canceled runs are recorded as
+The four fixtures cover license-investigation planning, the dependency path
+from Cobra to pflag, an exact repository URL, and an ISC dependency lookup.
+Each model has separate per-fixture pass/fail results; load errors and canceled runs are recorded as
 incomplete rather than passes. The report includes exact IDs, runtime and suite
 versions, timestamps and elapsed time. Download JSON to retain a local record
 of a run when needed. Generated reports are not part of the repository, and no
@@ -243,12 +243,15 @@ clears the in-memory chat history.
 Thinking is enabled automatically for custom answers when the selected model
 supports it, including the shortlisted Qwen 3 / 3.5 variants. There is no user-facing
 Thinking switch. These answers can take longer. Inventory and path investigations
-use thinking-off JSON planning. Plans use bounded integer indices rather than copying long module IDs,
-zero-temperature sampling, and one retry for malformed output. Invalid plans never become inferred facts. Standard checkpoints do not receive the thinking flag. The internal API retains
+use thinking-off JSON planning. The request lists candidate module IDs. The
+model returns a module index and uses investigation names for its topic and follow-ups.
+Questions matching a catalog description keep that topic. The model can choose
+follow-ups from the full catalog.
+Planning uses zero-temperature sampling and retries malformed output once. Invalid plans never become inferred facts. Standard checkpoints do not receive the thinking flag. The internal API retains
 an explicit `thinking: false` override for developer evaluation; normal chat does
 not supply it.
 
-The worker passes `extra_body.enable_thinking` explicitly to WebLLM 0.2.86.
+The worker passes `extra_body.enable_thinking` explicitly to WebLLM 0.2.89.
 Fast custom answers use up to 192 generated tokens; thinking answers use up to 1,536 tokens total, including
 reasoning, with a 180-second timeout. These are limits, not guaranteed final-answer
 space: the model's 4,096-token context window also includes the prompt/history.
@@ -294,7 +297,7 @@ external services documented in `PRIVACY.md`; this is not an offline mode.
 - `assistant/loading.js`: numeric loading progress and distinct loaded/cache markers.
 - `assistant/generation.js`: per-checkpoint generation settings and streaming thinking-block removal.
 - `assistant/models.js`, `assistant/model-catalog.js`, and `assistant/model-profiles.js`: pinned WebLLM catalog, template-backed capability profiles, search and sorting.
-- `assistant/prompts.js`: profile-specific instruction and history placement.
+- `assistant/prompts.js`: profile-specific instruction placement.
 - `assistant/model-checks.js`: fixed inference fixtures and report validation.
 - `assistant/dev-checks.html` and `assistant/dev-checks.js`: developer-only batch evaluation UI, outside the user-facing chooser.
 - `assistant/local-ai.js` and `assistant/worker.js`: opt-in local model lifecycle

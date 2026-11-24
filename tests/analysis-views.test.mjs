@@ -5,6 +5,7 @@ import freshnessLens, {
   freshnessRecord,
   readFreshness,
 } from '../internal/app/web/static/analysis/freshness.js'
+import licenses from '../internal/app/web/static/analysis/licenses.js'
 import { groupedItems } from '../internal/app/web/static/analysis/ui.js'
 import { browserLenses, defaultLensID } from '../internal/app/web/static/analysis/registry.js'
 
@@ -71,7 +72,7 @@ test('release queues preserve resolved replacement identities and source failure
       ...node,
       lenses: { 'release-freshness': { status, message: 'Source unavailable' } },
     })
-    assert.equal(result.status, 'unknown')
+    assert.equal(result.status, status === 'error' ? 'error' : 'unknown')
     assert.equal(result.sourceStatus, status)
     assert.equal(result.message, 'Source unavailable')
     assert.equal(result.latest, '')
@@ -87,7 +88,7 @@ test('release queues preserve resolved replacement identities and source failure
   assert.equal(data.records.get('b').version, '')
 })
 
-test('release view handles a missing record using the graph observation', (t) => {
+function renderFixture(t) {
   class Element extends EventTarget {
     constructor() {
       super()
@@ -125,8 +126,16 @@ test('release view handles a missing record using the graph observation', (t) =>
       previous ? Object.defineProperty(globalThis, name, previous) : delete globalThis[name],
     )
   }
-  const node = { id: 'root', name: 'example.org/root', version: 'v1.0.0' },
-    host = new Element()
+  const texts = (item) => [
+    item.textContent,
+    ...item.children.filter((child) => child instanceof Element).flatMap(texts),
+  ]
+  return { host: new Element(), texts }
+}
+
+test('release view handles a missing record using the graph observation', (t) => {
+  const { host, texts } = renderFixture(t)
+  const node = { id: 'root', name: 'example.org/root', version: 'v1.0.0' }
   freshnessLens.render({
     host,
     graph: { rootId: node.id, nodes: [node], edges: [] },
@@ -136,11 +145,27 @@ test('release view handles a missing record using the graph observation', (t) =>
     select() {},
     highlight() {},
   })
-  const text = (element) => [
-    element.textContent,
-    ...element.children.flatMap((child) => (child instanceof Element ? text(child) : [])),
-  ]
-  assert(text(host).includes('Unknown / unavailable'))
+  assert(texts(host).includes('Unknown / unavailable'))
+})
+
+test('license rows distinguish failed requests from other missing evidence', (t) => {
+  const { host, texts } = renderFixture(t)
+  const nodes = ['missing', 'offline'].map((id) => ({ id, name: id, version: 'v1.0.0' }))
+  licenses.render({
+    host,
+    graph: { nodes },
+    node: nodes[0],
+    data: {
+      records: new Map([
+        ['missing', { status: 'unknown' }],
+        ['offline', { status: 'unknown', error: 'HTTP 503' }],
+      ]),
+    },
+    select() {},
+    highlight() {},
+  })
+  assert.ok(texts(host).includes('Unknown · lookup failed'))
+  assert.ok(texts(host).includes('Unknown'))
 })
 
 test('advisory result groups keep failed observations separate from successful empty results', () => {

@@ -1,6 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { licenseObservation, lookupLicenses } from '../internal/app/web/static/analysis/licenses.js'
+import {
+  licenseObservation,
+  lookupLicenses,
+  licenseColors,
+} from '../internal/app/web/static/analysis/licenses.js'
 import { clearPublicCache } from '../internal/app/web/static/analysis/public-data.js'
 const identity = { name: 'example.org/lib', version: 'v1.2.3' }
 test('license expressions retain source wording without inventing AND/OR or compatibility', () => {
@@ -42,6 +46,7 @@ test('lookup uses replacement version; a failed request remains unknown', async 
     nodes: [
       { id: 'a', ...identity, replaced: true, replacement: 'github.com/acme/fork@v2.0.0' },
       { id: 'b', name: 'example.org/offline', version: 'v1' },
+      { id: 'c', ...identity, replaced: true, replacement: '../local' },
     ],
   }
   const result = await lookupLicenses(graph, {
@@ -55,4 +60,7 @@ test('lookup uses replacement version; a failed request remains unknown', async 
   assert.ok(urls.some((url) => url.includes('github.com%2Facme%2Ffork/versions/v2.0.0')))
   assert.equal(result.records.get('a').status, 'observed')
   assert.equal(result.records.get('b').status, 'unknown')
+  assert.match(result.records.get('b').error, /503/)
+  assert.equal(result.records.get('c').error, undefined)
+  assert.deepEqual(licenseColors(graph, result), { a: '#78ceb3', b: '#e5a15a', c: '#8b95a7' })
 })

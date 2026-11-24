@@ -1,8 +1,8 @@
 // Committed WebLLM configuration snapshot (Apache-2.0); see docs/features/graph-assistant.md for maintenance.
 export const catalogInfo = Object.freeze({
-  version: '0.2.86',
-  source: 'https://raw.githubusercontent.com/mlc-ai/web-llm/v0.2.86/src/config.ts',
-  checked: '2026-10-22',
+  version: '0.2.89',
+  source: 'https://raw.githubusercontent.com/mlc-ai/web-llm/v0.2.89/src/config.ts',
+  checked: '2026-11-24',
   selection: 'tools/webllm-shortlist.json',
 })
 export const catalog = [

@@ -24,6 +24,7 @@ const (
 var (
 	cacheMu             sync.Mutex
 	cacheDB             js.Value
+	cacheOpen           js.Value
 	cacheMaintenanceMu  sync.Mutex
 	cacheWrites         int
 	cacheCleanupRunning bool
@@ -121,13 +122,22 @@ func openCacheDB(ctx context.Context) (js.Value, error) {
 		cacheMu.Unlock()
 		return db, nil
 	}
-	cacheMu.Unlock()
-
-	indexedDB := js.Global().Get("indexedDB")
-	if !indexedDB.Truthy() {
-		return js.Undefined(), context.Canceled
+	if !cacheOpen.Truthy() {
+		indexedDB := js.Global().Get("indexedDB")
+		if !indexedDB.Truthy() {
+			cacheMu.Unlock()
+			return js.Undefined(), context.Canceled
+		}
+		cacheOpen = openCachePromise(indexedDB)
 	}
+	promise := cacheOpen
+	cacheMu.Unlock()
+	return awaitPromise(ctx, promise)
+}
 
+// All first-open callers share the IDB request. A canceled waiter leaves the
+// upgrade and settlement handlers alive for the remaining waiters.
+func openCachePromise(indexedDB js.Value) js.Value {
 	request := indexedDB.Call("open", cacheDBName, cacheDBVersion)
 	onUpgrade := js.FuncOf(func(_ js.Value, _ []js.Value) any {
 		db := request.Get("result")
@@ -146,19 +156,20 @@ func openCacheDB(ctx context.Context) (js.Value, error) {
 	})
 	request.Set("onupgradeneeded", onUpgrade)
 
-	db, err := awaitIDBRequest(ctx, request, func() {
+	return idbRequestPromise(request, func() {
 		request.Set("onupgradeneeded", js.Null())
 		onUpgrade.Release()
+		cacheMu.Lock()
+		cacheOpen = js.Undefined()
+		if request.Get("error").Truthy() {
+			cacheMu.Unlock()
+			return
+		}
+		db := request.Get("result")
+		cacheDB = db
+		cacheMu.Unlock()
+		scheduleCacheCleanup(db)
 	})
-	if err != nil {
-		return js.Undefined(), err
-	}
-
-	cacheMu.Lock()
-	cacheDB = db
-	cacheMu.Unlock()
-	scheduleCacheCleanup(db)
-	return db, nil
 }
 
 // Cleanup transactions are serialized, and each deletes at most one batch.
@@ -241,7 +252,11 @@ func cleanupCacheBatch(db js.Value, minDelete int) (removed int) {
 	return n
 }
 
-func awaitIDBRequest(ctx context.Context, request js.Value, onSettled ...func()) (js.Value, error) {
+func awaitIDBRequest(ctx context.Context, request js.Value) (js.Value, error) {
+	return awaitPromise(ctx, idbRequestPromise(request, nil))
+}
+
+func idbRequestPromise(request js.Value, onSettled func()) js.Value {
 	executor := js.FuncOf(func(_ js.Value, args []js.Value) any {
 		resolve := args[0]
 		reject := args[1]
@@ -255,8 +270,8 @@ func awaitIDBRequest(ctx context.Context, request js.Value, onSettled ...func())
 			failure.Release()
 			// A canceled waiter can return before the IDB request completes.
 			// Keep all event handlers alive until its eventual success or error.
-			for _, cleanup := range onSettled {
-				cleanup()
+			if onSettled != nil {
+				onSettled()
 			}
 		}
 		success = js.FuncOf(func(_ js.Value, _ []js.Value) any {
@@ -275,7 +290,7 @@ func awaitIDBRequest(ctx context.Context, request js.Value, onSettled ...func())
 	})
 	promise := js.Global().Get("Promise").New(executor)
 	executor.Release()
-	return awaitPromise(ctx, promise)
+	return promise
 }
 
 func cacheTTL(requestURL string) int64 {

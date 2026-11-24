@@ -30,6 +30,10 @@ the camera or snapping the displayed positions to the solver. Resizing retains
 the zoom and the world point at the viewport center. WebGPU accelerates drawing;
 layout mathematics, network resolution and evidence fetches still run on the CPU.
 
+A single-module highlight includes its root path and neighbors unless the caller
+requests nodes only. Group highlights can supply a color for the highlighted nodes
+and their highlighted edges.
+
 ## Checks
 
 Run the repository checks with:
@@ -96,9 +100,12 @@ This resolves Cobra through the built WASM app and includes its payload in the
 output. A saved run can be replayed with
 `--fixture=/absolute/path/to/saved-run.json` without upstream API requests.
 
-The runner serves app/build and benchmark files over ephemeral localhost and
+The runner serves `internal/app/web/static/`, `dist/` and benchmark files over localhost and
 closes the browser/server afterward. Output defaults to
 `/private/tmp/gomod-lens-webgpu-benchmark.json`; set `BENCHMARK_OUTPUT` to retain
-a run elsewhere. Measurement output is generated on demand rather than checked
-into the repository. Earlier renderer implementations and comparison results
-remain available through Git history.
+a run elsewhere. The full run and `--verify` compare the 1,500-node synthetic graph with
+the reference in `verify.mjs`. On an Apple M4 Pro with Chrome 158 at 1280×800
+and device pixel ratio 2, 300 layout steps took 682.7 ms. The median of three
+draw p95 measurements was 4.7 ms for Canvas and 1.1 ms for WebGPU. On matching
+hardware and browser major version the runner warns when a measurement exceeds
+its reference by more than 50%.

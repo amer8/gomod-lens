@@ -101,3 +101,17 @@ test('an aborted lookup cannot return metadata for a superseded module', async (
     { name: 'AbortError' },
   )
 })
+
+test('picker reuses the retraction-aware latest release and keeps pinned versions selectable', async () => {
+  for (const knownLatest of ['v1.0.0', '']) {
+    const data = await fetchModuleVersions('example.org/pinned', 'v1.1.0', {
+      knownLatest,
+      fetcher: async (url) => {
+        assert.ok(url.endsWith('/@v/list'))
+        return { ok: true, text: async () => 'v1.0.0\nv1.1.0' }
+      },
+    })
+    assert.equal(data.latest, knownLatest)
+    assert.deepEqual(data.versions, ['v1.1.0', 'v1.0.0'])
+  }
+})

@@ -55,8 +55,8 @@ export function fitCamera(positions, width, height, padding = 48) {
  */
 export function createGraphScene(container, model, options = {}) {
   let disposed = false,
-    width = 0,
-    height = 0,
+    width = 1,
+    height = 1,
     pixelRatio = 0
   /** @type {number | null} */
   let frame = null
@@ -130,6 +130,7 @@ export function createGraphScene(container, model, options = {}) {
   function resize() {
     if (disposed) return
     const box = container.getBoundingClientRect()
+    if (box.width <= 0 || box.height <= 0) return
     const previousWidth = width,
       previousHeight = height,
       initial = pixelRatio === 0
@@ -153,6 +154,7 @@ export function createGraphScene(container, model, options = {}) {
       frame = null
     }
     if (pixelRatio !== Math.min(globalThis.devicePixelRatio || 1, 2)) resize()
+    if (!pixelRatio) return
     try {
       renderer.draw(camera, width, height)
     } catch (error) {

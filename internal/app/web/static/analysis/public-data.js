@@ -5,6 +5,13 @@ const memory = new Map()
 export function clearPublicCache() {
   memory.clear()
 }
+export class PublicHTTPError extends Error {
+  /** @param {number} status */
+  constructor(status) {
+    super(`Public source returned HTTP ${status}`)
+    this.status = status
+  }
+}
 /** @param {string} url @param {PublicOptions} [options] @returns {Promise<unknown>} */
 export function publicJSON(url, options) {
   return publicData(url, options, 'json')
@@ -50,7 +57,7 @@ async function publicData(url, { signal, body, fetcher = fetch } = {}, format) {
         }
       : {}),
   })
-  if (!response.ok) throw new Error(`Public source returned HTTP ${response.status}`)
+  if (!response.ok) throw new PublicHTTPError(response.status)
   const value = await response[format]()
   signal?.throwIfAborted()
   if (memory.size >= 1000) {

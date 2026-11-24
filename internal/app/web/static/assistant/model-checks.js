@@ -1,4 +1,5 @@
 import { catalogInfo } from './model-catalog.js'
+import { topics } from './topics.js'
 
 /** @typedef {{id: string, passed: boolean}} CheckResult */
 /** @typedef {{modelID: string, runtimeVersion: string, suiteVersion: number, results: CheckResult[]}} CheckedReport */
@@ -8,7 +9,7 @@ const object = (value) => value !== null && typeof value === 'object' && !Array.
 
 // Small, fixed fixtures exercise production planning and answering. Passing is
 // evidence for these cases on this device, not a benchmark or a quality guarantee.
-export const checkSuiteVersion = 1
+export const checkSuiteVersion = 2
 /** @typedef {{id: string, label: string, accepts: (value: unknown) => boolean}} BaseCheck */
 /** @typedef {BaseCheck & {kind: 'plan', data: import('./worker.js').PlanningData}} PlanningCheck */
 /** @typedef {BaseCheck & {kind: 'answer', data: import('./worker.js').AnswerData}} AnswerCheck */
@@ -35,13 +36,37 @@ export const checkCases = Object.freeze([
       object(value) && value.topic === 'licenses' && value.nodeID === 'example.org/root',
   },
   {
+    id: 'dependency-path',
+    label: 'Cobra to pflag path planning',
+    kind: 'plan',
+    data: {
+      question: 'How is github.com/spf13/pflag connected to the root?',
+      topics,
+      nodes: [
+        { id: 'github.com/spf13/cobra@v1.8.1' },
+        { id: 'github.com/cpuguy83/go-md2man/v2@v2.0.4' },
+        { id: 'github.com/spf13/pflag@v1.0.5' },
+      ],
+      selected: 'github.com/spf13/cobra@v1.8.1',
+      asked: [],
+    },
+    /** @param {unknown} value */
+    accepts: (value) =>
+      object(value) && value.topic === 'paths' && value.nodeID === 'github.com/spf13/pflag@v1.0.5',
+  },
+  {
     id: 'repository',
     label: 'Exact repository URL',
     kind: 'answer',
     data: {
       question: "Where's the repository on GitHub?",
-      evidence: 'The source repository URL is https://github.com/gin-gonic/gin.',
-      history: [],
+      evidence: [
+        {
+          label: 'Repository',
+          detail: 'The source repository URL is https://github.com/gin-gonic/gin.',
+        },
+      ],
+      previousQuestions: [],
       thinking: false,
     },
     /** @param {unknown} value */
@@ -54,9 +79,14 @@ export const checkCases = Object.freeze([
     kind: 'answer',
     data: {
       question: 'Which dependency has an ISC license?',
-      evidence:
-        'Recorded license evidence: example.org/isc-lib: ISC. example.org/mit-lib: MIT. These are the only two modules.',
-      history: [],
+      evidence: [
+        {
+          label: 'Licenses',
+          detail:
+            'example.org/isc-lib: ISC. example.org/mit-lib: MIT. These are the only two modules.',
+        },
+      ],
+      previousQuestions: [],
       thinking: false,
     },
     /** @param {unknown} value */
@@ -113,7 +143,7 @@ export function checkSummary(report) {
       label: 'Checking…',
       kind: 'running',
       rank: null,
-      title: 'Running local inference on three fixed assistant fixtures.',
+      title: `Running local inference on ${checkCases.length} fixed assistant fixtures.`,
     }
   if ('state' in report && report.state === 'incomplete')
     return {
