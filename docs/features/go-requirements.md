@@ -32,8 +32,10 @@ modules exceeding the target show **Requires newer** in amber. Changing the
 target preserves the version colors.
 
 Comparisons follow Go version ordering. A valid module file without a `go`
-directive has an implicit minimum of 1.16. Dependency `toolchain` directives
-are not consumer requirements and are ignored.
+directive has an implicit minimum of 1.16. The lens supports up to 32 digits in
+each numeric component, including beta and RC numbers. A longer component makes
+the module's minimum unknown. The same limit applies to comparison targets.
+The lens ignores dependency `toolchain` directives when determining consumer requirements.
 
 The highest observed minimum includes the root and is a lower bound while any
 module metadata is unknown. Meeting every observed minimum does not guarantee

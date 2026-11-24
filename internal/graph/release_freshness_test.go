@@ -1,6 +1,9 @@
 package graph
 
-import "testing"
+import (
+	"testing"
+	"unsafe"
+)
 
 func TestClassifyReleaseFreshness(t *testing.T) {
 	t.Parallel()
@@ -74,6 +77,19 @@ func TestLatestStableModuleVersionPrefersStableRelease(t *testing.T) {
 	got := LatestStableModuleVersion("v1.3.0-rc.1\nv1.2.9\nv1.3.0-beta.1\n")
 	if got != "v1.2.9" {
 		t.Fatalf("LatestStableModuleVersion() = %q, want stable v1.2.9", got)
+	}
+}
+
+func TestSelectedReleaseDoesNotRetainVersionList(t *testing.T) {
+	for _, want := range []string{"v1.0.0", "v1.0.0-rc.1"} {
+		list := want + "\nv0.9.0-beta.1\n"
+		got := LatestStableModuleVersion(list)
+		if got != want {
+			t.Fatalf("selected %q, want %q", got, want)
+		}
+		if unsafe.StringData(got) == unsafe.StringData(list) {
+			t.Error("the cached version still points into the input list")
+		}
 	}
 }
 

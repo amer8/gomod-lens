@@ -41,7 +41,12 @@ func resolveGraph(_ js.Value, args []js.Value) any {
 			reject.Invoke(jsError(err))
 			return
 		}
-		resolve.Invoke(toJS(graphview.NewResponse(*graph)))
+		raw, err := graphview.MarshalBrowserResponse(graphview.NewResponse(*graph))
+		if err != nil {
+			reject.Invoke(jsError(err))
+			return
+		}
+		resolve.Invoke(js.Global().Get("JSON").Call("parse", string(raw)))
 	})
 }
 
@@ -156,6 +161,11 @@ func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.Fe
 	}
 	if !f.refresh {
 		if body, ok := cachedResponse(ctx, request.URL); ok {
+			if request.ChargeBytes != nil {
+				if err := request.ChargeBytes(len(body)); err != nil {
+					return "", err
+				}
+			}
 			if request.MaxBytes > 0 && len(body) > request.MaxBytes {
 				return "", errors.New("cached response exceeds the browser size limit")
 			}
@@ -193,6 +203,9 @@ func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.Fe
 		return "", err
 	}
 	if !response.Get("ok").Bool() {
+		if body := response.Get("body"); body.Truthy() {
+			_, _ = awaitPromise(ctx, body.Call("cancel"))
+		}
 		return "", &staticresolver.HTTPError{
 			Status:     response.Get("status").Int(),
 			StatusText: response.Get("statusText").String(),
@@ -200,7 +213,7 @@ func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.Fe
 		}
 	}
 
-	body, err := readResponseText(ctx, response, request.MaxBytes)
+	body, err := readResponseText(ctx, response, request)
 	if err != nil {
 		return "", err
 	}
@@ -208,8 +221,8 @@ func (f browserFetcher) FetchText(ctx context.Context, request staticresolver.Fe
 	return body, nil
 }
 
-func readResponseText(ctx context.Context, response js.Value, limit int) (string, error) {
-	if limit <= 0 {
+func readResponseText(ctx context.Context, response js.Value, request staticresolver.FetchRequest) (string, error) {
+	if request.MaxBytes <= 0 {
 		text, err := awaitPromise(ctx, response.Call("text"))
 		if err != nil {
 			return "", err
@@ -231,7 +244,13 @@ func readResponseText(ctx context.Context, response js.Value, limit int) (string
 		}
 		value := chunk.Get("value")
 		size := value.Get("byteLength").Int()
-		if size > limit-len(body) {
+		if request.ChargeBytes != nil {
+			if err := request.ChargeBytes(size); err != nil {
+				_, _ = awaitPromise(ctx, reader.Call("cancel"))
+				return "", err
+			}
+		}
+		if size > request.MaxBytes-len(body) {
 			_, _ = awaitPromise(ctx, reader.Call("cancel"))
 			return "", errors.New("upstream response exceeds the browser size limit")
 		}

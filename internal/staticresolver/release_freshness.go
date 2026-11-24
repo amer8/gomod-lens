@@ -72,10 +72,11 @@ type releaseVersions struct {
 }
 
 const (
-	maxReleaseListBytes    = 1 << 20
-	maxListedVersions      = 10000
-	maxRetractionIntervals = 4096
-	maxReleaseVersionBytes = 256
+	maxReleaseListBytes      = 1 << 20
+	maxGraphReleaseListBytes = 32 << 20
+	maxListedVersions        = 10000
+	maxRetractionIntervals   = 4096
+	maxReleaseVersionBytes   = 256
 )
 
 var errReleaseVersionTooLong = fmt.Errorf("release version exceeds the browser limit of %d bytes", maxReleaseVersionBytes)
@@ -120,26 +121,34 @@ func (v releaseVersions) retracted(version string) bool {
 // Both the root query and the lens use the highest release's go.mod for
 // retractions, including when that release retracts itself.
 func (r *Resolver) latestRelease(ctx context.Context, path string) (releaseVersions, error) {
+	// The root and all replacement aliases share one lookup, including a
+	// failure or a lookup still in progress. ResolveGraph scopes it to ctx.
 	r.mu.Lock()
-	cached, ok := r.releaseVersionCache[path]
-	r.mu.Unlock()
-	if ok {
-		return cached, nil
+	lookup := r.releaseLookups[path]
+	if lookup == nil {
+		lookup = sync.OnceValues(func() (releaseVersions, error) {
+			return r.fetchLatestRelease(ctx, path)
+		})
+		r.releaseLookups[path] = lookup
 	}
+	r.mu.Unlock()
+	return lookup()
+}
 
+func (r *Resolver) fetchLatestRelease(ctx context.Context, path string) (releaseVersions, error) {
 	base := proxyModuleURL(path)
 	list, err := r.fetchText(ctx, base+"/@v/list", "text/plain,*/*")
 	if err != nil && !IsNotFound(err) {
 		return releaseVersions{}, err
 	}
 	if len(list) > maxReleaseListBytes {
-		return releaseVersions{}, errors.New("release history exceeds the browser size limit")
+		return releaseVersions{}, errReleaseListBudget
 	}
 	count := 0
 	for version := range strings.FieldsSeq(list) {
 		count++
 		if count > maxListedVersions {
-			return releaseVersions{}, errors.New("release history exceeds the browser size limit")
+			return releaseVersions{}, errReleaseListBudget
 		}
 		if len(version) > maxReleaseVersionBytes {
 			return releaseVersions{}, errReleaseVersionTooLong
@@ -183,9 +192,6 @@ func (r *Resolver) latestRelease(ctx context.Context, path string) (releaseVersi
 			}
 		}
 	}
-	r.mu.Lock()
-	r.releaseVersionCache[path] = release
-	r.mu.Unlock()
 	return release, nil
 }
 

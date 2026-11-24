@@ -2,10 +2,42 @@ package graphview
 
 import (
 	"encoding/json"
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/amer8/gomod-lens/internal/graph"
 )
+
+func TestBrowserResponseBudgetIncludesEveryField(t *testing.T) {
+	for _, g := range []graph.Graph{
+		{},
+		{Nodes: []graph.Node{}, Edges: []graph.Edge{}},
+		{
+			Nodes: []graph.Node{{ID: "root", Root: true}, {ID: "dep", Name: "example.org/dep"}},
+			Edges: []graph.Edge{{Source: "root", Target: "dep"}},
+			Meta:  graph.GraphMeta{Target: "a&b"},
+		},
+	} {
+		response := NewResponse(g)
+		response.ViewModel.NameEntries = []GroupEntry{{Name: "quote\"", IDs: []string{"one", "two"}}}
+		want, err := json.Marshal(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := marshalResponse(response, len(want))
+		if err != nil || len(got) != len(want) {
+			t.Fatalf("exact size: got %d bytes, want %d, err=%v", len(got), len(want), err)
+		}
+		var actual, expected any
+		if json.Unmarshal(got, &actual) != nil || json.Unmarshal(want, &expected) != nil || !reflect.DeepEqual(actual, expected) {
+			t.Fatalf("browser JSON differs from the graph contract: %s", got)
+		}
+		if raw, err := marshalResponse(response, len(want)-1); !errors.Is(err, errResponseSize) || raw != nil {
+			t.Fatalf("over-budget graph returned %d bytes, %v", len(raw), err)
+		}
+	}
+}
 
 func TestResponseSharesDescendantCountsWithSidebar(t *testing.T) {
 	g := graph.Graph{Nodes: []graph.Node{{ID: "root", Name: "example.org/root", Root: true}, {ID: "a", Name: "example.org/a"}, {ID: "leaf", Name: "example.org/leaf"}}, Edges: []graph.Edge{{Source: "root", Target: "a"}, {Source: "a", Target: "leaf"}}, PackageInfo: graph.PackageInfo{Names: []graph.PackageName{{Name: "example.org/root", Root: true, Count: 1}, {Name: "example.org/a", Count: 1}, {Name: "example.org/leaf", Count: 1}}}}

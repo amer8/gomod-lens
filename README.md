@@ -26,8 +26,15 @@ github.com/gin-gonic/gin@v1.10.0
 
 The graph shows resolved module versions and their requirement relationships.
 The browser resolver supports up to 1,500 selected modules, including the root,
-and 16,000 distinct edges. It also limits historical version loads and metadata
-size. When the Go module mirror confirms that a repository path and a declared
+and 16,000 distinct edges. Graph resolution and each Go requirements lookup
+have separate 32 MiB budgets for `go.mod` data, including cached and partially
+read files. Each graph analysis also has a 32 MiB budget for release lists and
+looks up release history once per module path, including replacement aliases.
+The browser also limits historical version loads, module identifier
+data (1 MiB for selected modules and 8 MiB across edge endpoints), and the
+complete graph response (32 MiB).
+
+When the Go module mirror confirms that a repository path and a declared
 module path refer to the same source revision and subdirectory, the shared URL
 uses the verified module and version. Otherwise it keeps the requested identity.
 Use the version selector to load another published release. URLs preserve the

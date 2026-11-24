@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func main() {
@@ -31,8 +32,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	address := normalizeAddress(*port)
-	log.Printf("serving %s at %s", root, displayAddress(address))
 	mux := http.NewServeMux()
 	mux.Handle("/", http.FileServer(http.Dir(root)))
 	if *devChecks {
@@ -43,7 +42,9 @@ func main() {
 			})
 		}
 	}
-	if err := http.ListenAndServe(address, noCache(mux)); err != nil {
+	server := previewServer(*port, mux)
+	log.Printf("serving %s at %s", root, displayAddress(server.Addr))
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatalf("listen: %v", err)
 	}
 }
@@ -65,15 +66,19 @@ func noCache(next http.Handler) http.Handler {
 	})
 }
 
-func normalizeAddress(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ":4173"
+func previewServer(address string, handler http.Handler) *http.Server {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		address = "4173"
 	}
-	if strings.Contains(raw, ":") {
-		return raw
+	if !strings.Contains(address, ":") {
+		address = "127.0.0.1:" + address
 	}
-	return ":" + raw
+	return &http.Server{
+		Addr:              address,
+		Handler:           noCache(handler),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 }
 
 func displayAddress(address string) string {

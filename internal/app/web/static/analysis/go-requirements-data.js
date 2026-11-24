@@ -7,7 +7,7 @@ import { outgoingIndex, shortestPath } from '../graph-traversal.js'
 /** @typedef {import('./types.js').GoRequirement} GoRequirement */
 /** @typedef {import('./types.js').ModuleIdentity} ModuleIdentity */
 /** @typedef {{records: Map<string, GoRequirement>, capturedAt?: string}} RequirementData */
-/** @typedef {{node: GraphNode, record: GoRequirement, family: string, status: string, search: string}} RequirementItem */
+/** @typedef {{node: GraphNode, record: GoRequirement, parts: string[] | null, family: string, status: string, search: string}} RequirementItem */
 /** @typedef {{id: string, label: string, items: RequirementItem[], color?: string}} RequirementGroup */
 /**
  * @typedef {Object} RequirementLookupOptions
@@ -25,25 +25,39 @@ const snapshots = new WeakMap()
 const releaseGroupColors = ['#74b7e7', '#ea8aa6', '#a0eea0', '#9674e7', '#eac28a']
 
 const versionPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\.(0|[1-9]\d*)|(beta|rc)(0|[1-9]\d*))?$/
+const maxComponentDigits = 32
+export const maxGoVersionLength = 3 * maxComponentDigits + '.beta'.length
+
+// Components are canonical ASCII decimals without leading zeroes.
+/** @param {string} left @param {string} right */
+function compareDigits(left, right) {
+  if (left.length !== right.length) return left.length < right.length ? -1 : 1
+  return left < right ? -1 : left > right ? 1 : 0
+}
 
 /** @param {unknown} value */
 function versionParts(value) {
-  if (typeof value !== 'string') return null
+  if (typeof value !== 'string' || value.length > maxGoVersionLength) return null
   const match = versionPattern.exec(value)
   if (!match || match[1] === '0') return null
-  const major = BigInt(match[1]),
-    minor = BigInt(match[2])
-  const languageOnly = match[3] === undefined && !match[4]
+  const [, major, minor, patch, kind, serial] = match
+  const revision = patch || serial || '0'
+  if (Math.max(major.length, minor.length, revision.length) > maxComponentDigits) return null
   // Since 1.21, language versions precede betas, RCs and the .0 release.
-  const phase =
-    match[4] === 'beta'
-      ? 1
-      : match[4] === 'rc'
-        ? 2
-        : languageOnly && (major > 1n || minor >= 21n)
-          ? 0
-          : 3
-  return [major, minor, BigInt(phase), BigInt(match[3] || match[5] || '0')]
+  let phase = '3'
+  if (kind === 'beta') phase = '1'
+  else if (kind === 'rc') phase = '2'
+  else if (!patch && (major !== '1' || compareDigits(minor, '21') >= 0)) phase = '0'
+  return [major, minor, phase, revision]
+}
+
+/** @param {string[]} left @param {string[]} right */
+export function compareVersionParts(left, right) {
+  for (let i = 0; i < left.length; i++) {
+    const order = compareDigits(left[i], right[i])
+    if (order) return order
+  }
+  return 0
 }
 
 /** @param {string} left @param {string} right */
@@ -51,8 +65,7 @@ export function compareGoVersions(left, right) {
   const a = versionParts(left),
     b = versionParts(right)
   if (!a || !b) throw new Error('Invalid Go version')
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1
-  return 0
+  return compareVersionParts(a, b)
 }
 
 /** @param {string} input */
@@ -180,53 +193,59 @@ export async function lookupGoRequirements(
 
 /** @param {GoRequirement | null | undefined} record @param {string} target */
 export function classifyRequirement(record, target) {
-  if (
-    record?.status !== 'observed' ||
-    typeof record.minimum !== 'string' ||
-    !versionParts(record.minimum) ||
-    !versionParts(target)
-  )
-    return 'unknown'
-  return compareGoVersions(record.minimum, target) > 0 ? 'newer' : 'meets'
+  const minimum = record?.status === 'observed' ? versionParts(record.minimum) : null
+  return comparisonStatus(minimum, versionParts(target))
+}
+
+/** @param {string[] | null} minimum @param {string[] | null} target */
+function comparisonStatus(minimum, target) {
+  if (!minimum || !target) return 'unknown'
+  return compareVersionParts(minimum, target) > 0 ? 'newer' : 'meets'
 }
 
 /** @param {GraphPayload} graph @param {RequirementData} data @param {string} target */
 export function requirementSummary(graph, data, target) {
+  const targetParts = versionParts(target)
+  /** @type {Map<string, {parts: string[], family: string, count: number}>} */
+  const versions = new Map()
+  /** @param {string | undefined} minimum */
+  function countVersion(minimum) {
+    if (!minimum || minimum.length > maxGoVersionLength) return null
+    let version = versions.get(minimum)
+    if (!version) {
+      const parts = versionParts(minimum)
+      if (!parts) return null
+      version = { parts, family: parts[0] + '.' + parts[1], count: 0 }
+      versions.set(minimum, version)
+    }
+    version.count++
+    return version
+  }
   const items = graph.nodes.map((node) => {
     const record =
       data.records?.get(node.id) ||
       /** @type {GoRequirement} */ ({ status: 'unknown', error: 'Module metadata unavailable' })
-    const parts = record.status === 'observed' && versionParts(record.minimum)
-    const family = parts ? parts.slice(0, 2).join('.') : ''
+    const version = record.status === 'observed' ? countVersion(record.minimum) : null
+    const parts = version?.parts ?? null
     return {
       node,
       record,
-      family,
-      status: classifyRequirement(record, target),
+      parts,
+      family: version?.family || '',
+      status: comparisonStatus(parts, targetParts),
       search: [
         node.name,
         node.version,
         record.identity?.name,
-        record.minimum && 'Go ' + record.minimum,
+        version && 'Go ' + record.minimum,
       ]
         .filter(Boolean)
         .join(' '),
     }
   })
-  /** @type {Map<string, number>} */
-  const versions = new Map()
-  for (const { record } of items)
-    if (
-      record.status === 'observed' &&
-      typeof record.minimum === 'string' &&
-      versionParts(record.minimum)
-    )
-      versions.set(record.minimum, (versions.get(record.minimum) || 0) + 1)
-  const minimums = [...versions].sort(([a], [b]) => compareGoVersions(b, a))
-  const highest = minimums[0]?.[0] || ''
-  const families = [...new Set(items.map((item) => item.family).filter(Boolean))].sort((a, b) =>
-    compareGoVersions(b, a),
-  )
+  const ranked = [...versions].sort(([, a], [, b]) => compareVersionParts(b.parts, a.parts))
+  const highestParts = ranked[0]?.[1].parts
+  const families = [...new Set(ranked.map(([, version]) => version.family))]
   const visibleFamilies = families.slice(0, 4)
   /** @type {RequirementGroup[]} */
   const groups = visibleFamilies.map((family) => ({
@@ -251,16 +270,11 @@ export function requirementSummary(graph, data, target) {
     groups.push({ id: 'unknown', label: 'Unknown', items: unknown, color: '#8b95a7' })
   return {
     items,
-    minimums,
-    highest,
+    minimums: ranked.map(([minimum, version]) => [minimum, version.count]),
+    highest: ranked[0]?.[0] || '',
     groups,
     highestItems: items.filter(
-      (item) =>
-        item.record.status === 'observed' &&
-        typeof item.record.minimum === 'string' &&
-        versionParts(item.record.minimum) &&
-        highest &&
-        compareGoVersions(item.record.minimum, highest) === 0,
+      (item) => item.parts && highestParts && compareVersionParts(item.parts, highestParts) === 0,
     ),
     newer: items.filter((item) => item.status === 'newer'),
     unknown,
@@ -269,9 +283,10 @@ export function requirementSummary(graph, data, target) {
 
 /** @param {GraphPayload} graph @param {RequirementData} data */
 export function defaultTarget(graph, data) {
-  return targetGoVersion(
-    data.records?.get(graph.rootId)?.minimum || requirementSummary(graph, data, '').highest,
-  )
+  const root = data.records?.get(graph.rootId)
+  if (root?.status === 'observed' && root.minimum && versionParts(root.minimum))
+    return targetGoVersion(root.minimum)
+  return targetGoVersion(requirementSummary(graph, data, '').highest)
 }
 
 /** @param {GraphPayload} graph @param {RequirementData} data */

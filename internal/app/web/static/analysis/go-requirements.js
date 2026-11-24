@@ -1,8 +1,9 @@
 import { action, badge, disclosure, element, link, moduleButton, notice, searchable } from './ui.js'
 import {
-  compareGoVersions,
+  compareVersionParts,
   defaultTarget,
   lookupGoRequirements,
+  maxGoVersionLength,
   requirementColors,
   requirementPath,
   requirementSummary,
@@ -29,11 +30,11 @@ function selectedRequirement({ graph, node, data, versionColors, select, highlig
     content = []
   content.push(element('strong', node.name + (node.version ? '@' + node.version : '')))
   const source = element('div', undefined, 'go-requirement-source')
-  if (record?.status === 'observed') {
+  if (record?.status === 'observed' && record.minimum && versionColors.has(record.minimum)) {
     source.append(
       versionLabel(
         'Go ' + record.minimum,
-        record.minimum ? versionColors.get(record.minimum) : undefined,
+        versionColors.get(record.minimum),
         'analysis-badge',
       ),
     )
@@ -100,7 +101,7 @@ function render({ host, graph, node, data, state, select, highlight }) {
   input.value = state.target
   input.placeholder = 'e.g. 1.26.10'
   input.spellcheck = false
-  input.maxLength = 64
+  input.maxLength = maxGoVersionLength + 'go'.length
   input.setAttribute('aria-label', 'Target Go toolchain')
   const compare = element('button', 'Compare', 'analysis-button')
   compare.type = 'submit'
@@ -224,9 +225,9 @@ function render({ host, graph, node, data, state, select, highlight }) {
     const ordered = [
       ...(state.group === 'highest' ? summary.highestItems : selectedGroup?.items || summary.items),
     ].sort((a, b) => {
-      if (!a.family || !b.family) return Number(Boolean(b.family)) - Number(Boolean(a.family))
+      if (!a.parts || !b.parts) return Number(Boolean(b.parts)) - Number(Boolean(a.parts))
       return (
-        compareGoVersions(b.record.minimum || '', a.record.minimum || '') ||
+        compareVersionParts(b.parts, a.parts) ||
         a.node.name.localeCompare(b.node.name)
       )
     })

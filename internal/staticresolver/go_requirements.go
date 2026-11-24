@@ -2,6 +2,7 @@ package staticresolver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -16,19 +17,45 @@ type GoRequirements struct {
 	CapturedAt string                         `json:"capturedAt"`
 }
 
+// A single observation can appear under many graph IDs after replacements.
+// Charge the encoded map entries before storing them for the WASM response.
+func (r GoRequirements) record(ids []string, observation graph.GoRequirement, remaining *int) error {
+	value, err := json.Marshal(observation)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		key, err := json.Marshal(id)
+		if err != nil {
+			return err
+		}
+		size := len(key) + len(value) + 2 // colon and comma
+		if size > *remaining {
+			return errors.New("Go requirements response exceeds the browser size limit")
+		}
+		*remaining -= size
+		r.Records[id] = observation
+	}
+	return nil
+}
+
 // LookupGoRequirements loads only the supplied versions. Duplicate replacement
 // identities share a fetch and parse; failures remain unknown per module.
 func (r *Resolver) LookupGoRequirements(ctx context.Context, nodes []graph.Node, progress func(int, int)) (GoRequirements, error) {
 	if r == nil || r.fetcher == nil {
 		return GoRequirements{}, errors.New("static resolver requires a fetcher")
 	}
+	scoped := r.forAnalysis()
 	result := GoRequirements{Records: make(map[string]graph.GoRequirement)}
+	remaining := 32 << 20 // encoded metadata entries per browser response
 	groups := make(map[graph.ModuleIdentity][]string)
 	identities := make([]graph.ModuleIdentity, 0)
 	for _, node := range nodes {
 		identity, ok := goRequirementIdentity(node)
 		if !ok {
-			result.Records[node.ID] = graph.GoRequirement{Status: "unknown", Error: "No resolved public module version is available."}
+			if err := result.record([]string{node.ID}, graph.GoRequirement{Status: "unknown", Error: "No resolved public module version is available."}, &remaining); err != nil {
+				return GoRequirements{}, err
+			}
 			continue
 		}
 		if _, found := groups[identity]; !found {
@@ -42,7 +69,8 @@ func (r *Resolver) LookupGoRequirements(ctx context.Context, nodes []graph.Node,
 		progress(done, len(nodes))
 	}
 	err := mapLimit(ctx, identities, 4, func(_ int, identity graph.ModuleIdentity) error {
-		meta, err := r.loadGoMod(ctx, identity.Name, identity.Version)
+		// Each identity is visited once. Keep just the observation after parsing.
+		meta, err := scoped.fetchGoMod(ctx, identity.Name, identity.Version)
 		var observation graph.GoRequirement
 		if err != nil {
 			if ctx.Err() != nil || errors.Is(err, context.Canceled) {
@@ -56,10 +84,10 @@ func (r *Resolver) LookupGoRequirements(ctx context.Context, nodes []graph.Node,
 		}
 		mu.Lock()
 		defer mu.Unlock()
-		for _, id := range groups[identity] {
-			result.Records[id] = observation
-			done++
+		if err := result.record(groups[identity], observation, &remaining); err != nil {
+			return err
 		}
+		done += len(groups[identity])
 		if progress != nil {
 			progress(done, len(nodes))
 		}
@@ -77,8 +105,30 @@ func requirementObservation(meta moduleMeta, identity graph.ModuleIdentity) grap
 	if minimum == "" {
 		minimum = "1.16"
 	}
+	if !goMinimumFitsLens(minimum) {
+		return graph.GoRequirement{Status: "unknown", Identity: identity, Source: meta.Source, ObservedAt: meta.ObservedAt,
+			Error: "Go minimum exceeds the browser version limit."}
+	}
 	return graph.GoRequirement{Status: "observed", Minimum: minimum, Implicit: meta.GoVersion == "",
 		Identity: identity, Source: meta.Source, ObservedAt: meta.ObservedAt}
+}
+
+// Graph resolution still uses the declared Go version for module pruning.
+// Only the observation sent to the browser lens needs this size limit.
+func goMinimumFitsLens(version string) bool {
+	const maxComponentDigits = 32
+	if len(version) <= maxComponentDigits {
+		return true
+	}
+	if len(version) > 3*maxComponentDigits+len(".beta") {
+		return false
+	}
+	for digits := range strings.FieldsFuncSeq(version, func(r rune) bool { return r < '0' || r > '9' }) {
+		if len(digits) > maxComponentDigits {
+			return false
+		}
+	}
+	return true
 }
 
 func goRequirementIdentity(node graph.Node) (graph.ModuleIdentity, bool) {

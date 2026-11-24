@@ -78,6 +78,67 @@ const observation = (node, minimum = '1.26') => ({
   observedAt: '2026-10-27T10:00:00Z',
 })
 
+test('Go minimum and target limits apply to every numeric component without losing precision', () => {
+  const limit = '9'.repeat(32)
+  for (const makeVersion of [
+    (n) => n + '.1',
+    (n) => '1.' + n,
+    (n) => '1.26.' + n,
+    (n) => '1.26beta' + n,
+    (n) => '1.26rc' + n,
+  ]) {
+    const atLimit = makeVersion(limit)
+    const overLimit = makeVersion(limit + '0')
+    assert(targetGoVersion('go' + atLimit))
+    assert(compareGoVersions(atLimit, makeVersion(limit.slice(0, -1) + '8')) > 0)
+    assert.equal(targetGoVersion(overLimit), '')
+    assert.throws(() => compareGoVersions(overLimit, atLimit), /Invalid Go version/)
+    assert.equal(classifyRequirement(observation(root, overLimit), atLimit), 'unknown')
+  }
+  const longest = limit + '.' + limit + 'beta' + limit
+  assert.equal(targetGoVersion('go' + longest), longest)
+})
+
+test('shared minimums and targets do not multiply BigInt conversions across graph nodes', (t) => {
+  const bigInt = t.mock.method(globalThis, 'BigInt')
+  const summarize = (count) => {
+    const nodes = Array.from({ length: count }, (_, i) => ({ ...dependency, id: String(i) }))
+    const records = new Map(
+      nodes.map((node, i) => [
+        node.id,
+        observation(node, i % 2 ? '1.26.9007199254740993' : '1.26.9007199254740992'),
+      ]),
+    )
+    bigInt.mock.resetCalls()
+    const summary = requirementSummary({ nodes }, { records }, '1.26.9007199254740992')
+    assert.equal(summary.highestItems.length, count / 2)
+    assert.equal(summary.newer.length, count / 2)
+    return bigInt.mock.callCount()
+  }
+  assert.equal(summarize(20), summarize(2))
+})
+
+test('oversized minimums are unknown in saved graphs and supplemental responses', async () => {
+  const oversized = '1.26rc' + '9'.repeat(33)
+  const snapshot = {
+    rootId: root.id,
+    nodes: [
+      { ...root, goRequirement: observation(root, oversized) },
+      { ...dependency, goRequirement: observation(dependency, '1.27') },
+    ],
+  }
+  const result = await lookupGoRequirements(snapshot, {
+    lookup: async () => ({ records: { root: observation(root, oversized) } }),
+  })
+  assert.equal(result.records.get(root.id).status, 'unknown')
+  assert.equal(result.records.get(root.id).minimum, undefined)
+  const saved = { records: new Map(snapshot.nodes.map((node) => [node.id, node.goRequirement])) }
+  const summary = requirementSummary(snapshot, saved, '1.27.0')
+  assert.deepEqual(summary.unknown.map((item) => item.node.id), [root.id])
+  assert(!summary.unknown[0].search.includes(oversized))
+  assert.equal(defaultTarget(snapshot, saved), '1.27.0')
+})
+
 test('graph metadata is reused and only missing exact versions go to WASM', async () => {
   const seededRoot = Object.freeze({ ...root, goRequirement: observation(root) })
   const snapshot = Object.freeze({

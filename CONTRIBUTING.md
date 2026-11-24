@@ -16,8 +16,9 @@ Run the static application locally:
 make serve
 ```
 
-Open `http://localhost:4173`. `make run` is an alias for the same preview;
-set `PORT` to use a different port. The preview server only serves files.
+Open `http://localhost:4173`. `make run` is an alias for the same preview.
+A numeric `PORT` binds to IPv4 loopback. To listen on another interface,
+set `PORT` to its explicit `host:port` address. The preview server only serves files.
 There is no application backend or HTTP API.
 
 Run focused tests with repo-local Go cache directories:

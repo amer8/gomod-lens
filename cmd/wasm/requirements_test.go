@@ -4,8 +4,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"syscall/js"
 	"testing"
+
+	"github.com/amer8/gomod-lens/internal/staticresolver"
 )
 
 func TestRequirementsBridgeUsesGoParserAndRefreshBypassesCache(t *testing.T) {
@@ -75,9 +78,53 @@ func TestBoundedResponseRead(t *testing.T) {
 		tooLarge bool
 	}{{"1234", false}, {"12345", true}} {
 		response := js.Global().Get("Response").New(tc.body)
-		got, err := readResponseText(context.Background(), response, 4)
+		charged := 0
+		request := staticresolver.FetchRequest{MaxBytes: 4, ChargeBytes: func(n int) error {
+			charged += n
+			return nil
+		}}
+		got, err := readResponseText(context.Background(), response, request)
+		if charged != len(tc.body) {
+			t.Fatalf("charged %d bytes for a %d-byte response", charged, len(tc.body))
+		}
 		if (err != nil) != tc.tooLarge || !tc.tooLarge && got != tc.body {
 			t.Fatalf("size %d returned %q, %v", len(tc.body), got, err)
+		}
+	}
+}
+
+func TestCachedManifestChargesTheSameBudgetAsAStream(t *testing.T) {
+	cacheMu.Lock()
+	oldDB := cacheDB
+	cacheDB = js.Global().Get("Function").New(`
+		return {transaction: () => ({objectStore: () => ({get() {
+			const r = {result: {body: "abcd", expiresAt: Date.now() + 60000}};
+			queueMicrotask(() => r.onsuccess());
+			return r;
+		}})})}`).Invoke()
+	cacheMu.Unlock()
+	defer func() { cacheMu.Lock(); cacheDB = oldDB; cacheMu.Unlock() }()
+
+	denied := errors.New("budget exhausted")
+	for _, tc := range []struct {
+		limit int
+		deny  bool
+	}{{4, false}, {3, false}, {4, true}} {
+		charged := 0
+		req := staticresolver.FetchRequest{
+			URL: "https://proxy.golang.org/example.org/a/@v/v1.0.0.mod", MaxBytes: tc.limit,
+			ChargeBytes: func(n int) error {
+				charged += n
+				if tc.deny {
+					return denied
+				}
+				return nil
+			},
+		}
+		body, err := (browserFetcher{}).FetchText(context.Background(), req)
+		wantError := tc.deny || tc.limit < 4
+		if charged != 4 || (err != nil) != wantError || tc.deny && !errors.Is(err, denied) || !wantError && body != "abcd" {
+			t.Fatalf("cached manifest limit=%d deny=%t: body=%q charged=%d err=%v", tc.limit, tc.deny, body, charged, err)
 		}
 	}
 }

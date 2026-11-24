@@ -1,6 +1,7 @@
 package staticresolver
 
 import (
+	"errors"
 	"fmt"
 	goversion "go/version"
 
@@ -26,6 +27,7 @@ type exclusion struct {
 type moduleMeta struct {
 	ModulePath       string
 	GoVersion        string
+	Pruning          modulePruning
 	RequestedPath    string
 	RequestedVersion string
 	Requires         []requirement
@@ -43,7 +45,12 @@ type moduleMeta struct {
 func parseGoMod(raw string) (moduleMeta, error) {
 	file, err := modfile.Parse("go.mod", []byte(raw), nil)
 	if err != nil {
-		return moduleMeta{}, err
+		// Formatting the parser's ErrorList would expand every diagnostic and
+		// copy manifest text into graph and lens responses. Keep the location.
+		if diagnostics, ok := err.(modfile.ErrorList); ok && len(diagnostics) > 0 && diagnostics[0].Pos.Line > 0 {
+			return moduleMeta{}, fmt.Errorf("invalid go.mod at line %d", diagnostics[0].Pos.Line)
+		}
+		return moduleMeta{}, errors.New("invalid go.mod")
 	}
 	if file.Module == nil || file.Module.Mod.Path == "" {
 		return moduleMeta{}, fmt.Errorf("source did not contain a module declaration")
@@ -54,6 +61,7 @@ func parseGoMod(raw string) (moduleMeta, error) {
 		if !goversion.IsValid("go" + result.GoVersion) {
 			return moduleMeta{}, fmt.Errorf("source contains an invalid Go minimum")
 		}
+		result.Pruning = pruningForGoDirective(result.GoVersion)
 	}
 	for _, item := range file.Require {
 		result.Requires = append(result.Requires, requirement{Path: item.Mod.Path, Version: item.Mod.Version, Indirect: item.Indirect})

@@ -3,6 +3,7 @@ package staticresolver
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,6 +28,61 @@ func TestSharedModuleParser(t *testing.T) {
 	for _, body := range []string{"", "<html>error</html>", "module x\ngo invalid", "module x\ngo 1.26\ngo 1.27", "module x\ngo", "module x\n/* unfinished", "module x\ngo 1.026", "module x\ngo go1.26", "module x\ngo 1.17.0junk", "module x\ngo 1.17.0-custom1", "module x\ngo 2"} {
 		if _, err := parseGoMod(body); err == nil {
 			t.Fatalf("malformed metadata accepted: %q", body)
+		}
+	}
+}
+
+func TestGoRequirementComponentLimitInGraphAndLookup(t *testing.T) {
+	const path = "example.org/lib"
+	const version = "v1.0.0"
+	base := proxyModuleURL(path) + "/@v/"
+	for _, length := range []int{32, 33} {
+		digits := strings.Repeat("9", length)
+		for _, minimum := range []string{digits + ".1", "1." + digits, "1.26." + digits, "1.26beta" + digits, "1.26rc" + digits} {
+			resolver := New(fakeFetcher{base + version + ".mod": "module " + path + "\ngo " + minimum + "\n"})
+			result, err := resolver.ResolveGraph(t.Context(), path+"@"+version, Options{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			node := result.Nodes[0]
+			lookup, err := resolver.LookupGoRequirements(t.Context(), []graph.Node{node}, nil)
+			if err != nil || node.GoRequirement == nil {
+				t.Fatalf("missing metadata for %s: %v", minimum, err)
+			}
+			for _, obs := range []graph.GoRequirement{*node.GoRequirement, lookup.Records[node.ID]} {
+				if length == 32 {
+					if obs.Status != "observed" || obs.Minimum != minimum {
+						t.Errorf("lost exact minimum %s: %+v", minimum, obs)
+					}
+				} else if obs.Status != "unknown" || obs.Minimum != "" || obs.Error == "" || obs.Source == "" || obs.Identity.Name != path {
+					t.Errorf("oversized minimum %s: %+v", minimum, obs)
+				}
+			}
+		}
+	}
+}
+
+func TestInvalidManifestDiagnosticsStayBoundedAcrossConsumers(t *testing.T) {
+	const path = "example.org/lib"
+	const diagnostic = "invalid go.mod at line 2"
+	base := proxyModuleURL(path) + "/@v/"
+	node := graph.Node{ID: path + "@v1.0.0", Name: path, Version: "v1.0.0"}
+	for _, invalid := range []string{"go invalid\nretract\nexclude\n", "require \"unterminated\n"} {
+		resolver := New(fakeFetcher{
+			base + "list":       "v1.0.0\n",
+			base + "v1.0.0.mod": "module " + path + "\n" + invalid,
+		})
+		if _, err := resolver.ResolveGraph(t.Context(), node.ID, Options{}); err == nil || err.Error() != diagnostic {
+			t.Errorf("root parse error = %v, want %q", err, diagnostic)
+		}
+		info, err := resolver.releaseFreshnessForNode(t.Context(), node)
+		if err != nil || info.Status != graph.ReleaseFreshnessStatusError || info.Message != diagnostic {
+			t.Errorf("freshness diagnosis = %+v, %v", info, err)
+		}
+		requirements, err := resolver.LookupGoRequirements(t.Context(), []graph.Node{node}, nil)
+		record := requirements.Records[node.ID]
+		if err != nil || record.Status != "unknown" || record.Error != diagnostic {
+			t.Errorf("requirements diagnosis = %+v, %v", record, err)
 		}
 	}
 }

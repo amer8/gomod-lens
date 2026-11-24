@@ -18,13 +18,14 @@ func TestSpecificReplacementWinsRegardlessOfDirectiveOrder(t *testing.T) {
 	exact := replacement{OldPath: "example.org/a", OldVersion: "v1.0.0", NewPath: "example.org/exact", NewVersion: "v1.0.1"}
 	wildcard := replacement{OldPath: "example.org/a", NewPath: "example.org/general", NewVersion: "v1.0.0"}
 	for _, rules := range [][]replacement{{wildcard, exact}, {exact, wildcard}} {
-		if got := replacementFor("example.org/a", "v1.0.0", rules); got == nil || got.NewPath != exact.NewPath {
+		index := indexReplacements(rules)
+		if got := index.lookup("example.org/a", "v1.0.0"); got == nil || got.NewPath != exact.NewPath {
 			t.Fatalf("specific rule lost precedence: %+v", got)
 		}
-		if got := replacementFor("example.org/a", "v1.1.0", rules); got == nil || got.NewPath != wildcard.NewPath {
+		if got := index.lookup("example.org/a", "v1.1.0"); got == nil || got.NewPath != wildcard.NewPath {
 			t.Fatalf("wildcard fallback missing: %+v", got)
 		}
-		if got := replacementFor("example.org/other", "v1.0.0", rules); got != nil {
+		if got := index.lookup("example.org/other", "v1.0.0"); got != nil {
 			t.Fatalf("replacement matched a different module: %+v", got)
 		}
 	}

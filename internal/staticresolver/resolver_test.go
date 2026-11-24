@@ -204,7 +204,7 @@ func TestResolutionBudgets(t *testing.T) {
 	if _, err := resolver.resolveRequirements(ctx, root, moduleMeta{}, []requirement{dep, second}, nil, nil, newProgressReporter(nil), &budget); err == nil {
 		t.Fatal("requirement visit limit was ignored")
 	}
-	fetch := &graphFetcher{Fetcher: fakeFetcher{"a.mod": "1234", "b.mod": "567"}, remaining: 6}
+	fetch := &graphFetcher{Fetcher: fakeFetcher{"a.mod": "1234", "b.mod": "567"}, manifestBytesLeft: 6}
 	if _, err := fetch.FetchText(ctx, FetchRequest{URL: "a.mod"}); err != nil {
 		t.Fatal(err)
 	}
@@ -402,6 +402,46 @@ func TestResolveGraphPrunesTransitiveRequirementsForModernModules(t *testing.T) 
 	}
 	if !hasEdge(result.Edges, "example.com/text@v1.0.0", "example.com/tools@v1.0.0") {
 		t.Fatalf("expected edge from loaded root dependency to pruned selected dependency: %+v", result.Edges)
+	}
+}
+
+func TestReplacementAliasesReuseParsedPruning(t *testing.T) {
+	const fork = "example.com/fork"
+	const version = "v1.0.0"
+	leafURL := proxyModuleURL("example.com/leaf") + "/@v/v1.0.0.mod"
+	fetcher := &requirementFetcher{calls: make(map[string]int), files: fakeFetcher{
+		proxyModuleURL("example.com/root") + "/@latest": `{"Version":"v1.0.0"}`,
+		proxyModuleURL("example.com/root") + "/@v/v1.0.0.mod": `module example.com/root
+go 1.17
+require example.com/a v1.0.0
+require example.com/b v1.0.0
+replace example.com/a => example.com/fork v1.0.0
+replace example.com/b => example.com/fork v1.0.0
+`,
+		proxyModuleURL(fork) + "/@v/v1.0.0.mod": "module example.com/fork\ngo 1.17\nrequire example.com/leaf v1.0.0\n",
+		leafURL:                                 "module example.com/leaf\n",
+	}}
+	resolver := New(fetcher)
+	meta, err := resolver.loadGoMod(t.Context(), fork, version)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A fresh read of the directive would now expand the leaf. Both aliases
+	// should use the pruning decision made when the shared manifest was parsed.
+	meta.GoVersion = "1.16"
+	resolver.modFileCache[moduleID(fork, version)] = meta
+
+	result, err := resolver.resolveGraph(t.Context(), "example.com/root", Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fetcher.calls[leafURL]; got != 0 {
+		t.Errorf("leaf manifest fetched %d times, want 0", got)
+	}
+	for _, alias := range []string{"example.com/a", "example.com/b"} {
+		if !hasEdge(result.Edges, moduleID(alias, version), moduleID("example.com/leaf", version)) {
+			t.Errorf("missing edge from %s to the pruned leaf", alias)
+		}
 	}
 }
 

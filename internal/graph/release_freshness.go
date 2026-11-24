@@ -233,10 +233,11 @@ func LatestStableModuleVersion(versionList string) string {
 			preview = version
 		}
 	}
-	if stable != "" {
-		return stable
+	if stable == "" {
+		stable = preview
 	}
-	return preview
+	// The selected version is cached after the full list can be discarded.
+	return strings.Clone(stable)
 }
 
 func releaseFreshnessScore(status string) *float64 {

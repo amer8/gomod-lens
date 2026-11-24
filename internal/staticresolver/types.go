@@ -13,6 +13,10 @@ type FetchRequest struct {
 	URL      string
 	Accept   string
 	MaxBytes int // Zero leaves the response unrestricted.
+	// Streaming fetchers charge every chunk on receipt, including the one
+	// that exceeds MaxBytes. Cached responses are charged on retrieval.
+	// A charge error stops the read.
+	ChargeBytes func(int) error
 }
 
 // Fetcher retrieves text resources for static module resolution.
